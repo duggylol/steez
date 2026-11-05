@@ -69,15 +69,20 @@ Steez updates itself the way Discord does. On every launch, the start-up screen 
 ### Publishing an update
 
 1. Commit your changes.
-2. Run one of:
+2. Run:
    ```bash
-   npm run ship:patch
+   npm run ship
    ```
-   ```bash
-   npm run ship:minor
-   ```
-   This bumps the version, tags the commit and pushes it.
-3. GitHub Actions (`.github/workflows/release.yml`) builds the installer and publishes it as a release. Every copy of Steez installs it on its next launch.
+   Use `npm run ship minor` for bigger releases.
+
+`npm run ship` does everything from this PC, using the `gh` CLI's GitHub login:
+- runs the tests
+- bumps the version, then commits and tags it
+- builds the installer and publishes it as a GitHub release
+- checks that the update files arrived
+- pushes the commit and tag
+
+Every copy of Steez installs the new version on its next launch. (`.github/workflows/release.yml` can do the same build on GitHub, but you have to start it manually.)
 
 ### Twitch app
 

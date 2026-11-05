@@ -19,10 +19,9 @@
     "icon": "electron scripts/make-icon.cjs",
     "dist": "npm run build && electron-builder --win",
     "release": "npm run build && electron-builder --win --publish always",
-    "ship:patch": "npm version patch && git push --follow-tags",
-    "ship:minor": "npm version minor && git push --follow-tags",
     "relay:setup": "node scripts/relay-wizard.mjs",
-    "relay:deploy": "cd relay && npx --yes wrangler@4 deploy"
+    "relay:deploy": "cd relay && npx --yes wrangler@4 deploy",
+    "ship": "node scripts/release.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

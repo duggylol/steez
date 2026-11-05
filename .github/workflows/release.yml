@@ -1,10 +1,8 @@
-# Builds the Windows installer and publishes it as a GitHub Release whenever a version tag
-# (v1.2.3) is pushed. Every installed copy of Steez picks the release up on its next launch.
+# Optional cloud build. Releases are normally published from your PC with `npm run ship`;
+# run this manually (Actions → Release → Run workflow, on a version tag) if you prefer building on GitHub.
 name: Release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
