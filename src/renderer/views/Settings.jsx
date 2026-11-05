@@ -95,11 +95,11 @@ function Accounts({ twitch }) {
         <div className="grow">
           <b>{title}</b>
           <div className="faint small">
-            {a ? (a.expired ? `Login expired (${a.login})` : `Connected as ${a.login}`) : desc}
+            {a ? (a.expired ? `Login expired (${a.login}) — reconnect` : a.otherApp ? `Connected as ${a.login} through another app (e.g. SongSeek) — click Reconnect to finish setup` : `Connected as ${a.login}`) : desc}
             {a && !a.expired && a.missingScopes?.length > 0 && ' · reconnect to grant the newest permissions'}
           </div>
         </div>
-        {a && !a.expired && <Pill tone="good">Connected</Pill>}
+        {a && !a.expired && (a.otherApp ? <Pill tone="warn">Needs reconnect</Pill> : <Pill tone="good">Connected</Pill>)}
         {a?.expired && <Pill tone="bad">Expired</Pill>}
         <Button size="sm" variant={a && !a.expired ? undefined : 'primary'} disabled={!state.config.clientIdSet} onClick={() => login(role)}>
           {a ? 'Reconnect' : 'Connect'}

@@ -112,7 +112,7 @@ export function builtinList() {
 
 export function botState() {
   const acct = (r) =>
-    db.auth[r] ? { login: db.auth[r].login, scopes: db.auth[r].scopes, expired: !!db.auth[r].expired, missingScopes: missingScopes(r) } : null;
+    db.auth[r] ? { login: db.auth[r].login, scopes: db.auth[r].scopes, expired: !!db.auth[r].expired, missingScopes: missingScopes(r), otherApp: !!(db.auth[r].clientId && config.clientId && db.auth[r].clientId !== config.clientId) } : null;
   return {
     status: bot.status(),
     auth: { broadcaster: acct('broadcaster'), bot: acct('bot') },

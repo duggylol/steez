@@ -814,7 +814,7 @@ function pageModPanel(main, on) {
     const tone = status.state === 'online' ? 'good' : status.state === 'error' ? 'bad' : '';
     const text = { online: 'Live — mods can connect', connecting: 'Connecting…', off: status.enabled ? 'Not connected' : 'Turned off', error: 'Problem' }[status.state] || status.state;
     st.replaceChildren(
-      h('div', { class: 'row' }, h('span', { class: `pill ${tone}` }, text), status.detail ? h('span', { class: 'faint small' }, status.detail) : null),
+      h('div', { class: 'row' }, h('span', { class: `pill ${tone}` }, text), status.detail ? h('span', { class: 'faint small grow' }, status.detail) : null, status.state !== 'online' && status.enabled ? btn('Reconnect', async () => draw(await api.action('modpanel:reconnect')), 'sm') : null),
       status.url
         ? h('div', { style: 'margin-top:14px' },
             h('div', { class: 'faint small', style: 'margin-bottom:6px' }, 'Send this link to your mods. They log in with their own Twitch account — only moderators of your channel get in.'),

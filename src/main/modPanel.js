@@ -220,6 +220,8 @@ export function startModPanel({ send, version = '' }) {
     const acct = getAccount('broadcaster');
     if (!P()?.enabled || !config.relayUrl) return setState('off');
     if (!acct) return setState('off', 'Connect your Twitch channel first.');
+    if (acct.clientId && config.clientId && acct.clientId !== config.clientId)
+      return setState('error', 'Your Twitch login came from another app (e.g. SongSeek). Reconnect your channel in Settings → Twitch accounts.');
     setState('connecting');
     const sock = (ws = new WebSocket(`${config.relayUrl.replace(/^http/, 'ws')}/v1/hub`, { headers: { Authorization: `Bearer ${acct.accessToken}` } }));
     sock.on('open', () => {
@@ -238,11 +240,33 @@ export function startModPanel({ send, version = '' }) {
       }
       if (msg.type === 'call') handleCall(msg);
     });
-    sock.on('unexpected-response', (_req, res) => {
-      setState('error', res.statusCode === 401 ? 'Twitch login expired — reconnect your channel.' : `Relay answered ${res.statusCode}`);
+    // The relay refused the connection. With a listener attached, `ws` does not close the socket
+    // or emit 'close' on its own, so we read the reason, abort, and schedule the retry ourselves.
+    sock.on('unexpected-response', (req, res) => {
+      let body = '';
+      res.on('data', (c) => (body += c));
+      res.on('end', () => {
+        let code = '';
+        try {
+          code = JSON.parse(body).error || '';
+        } catch {
+          /* not JSON */
+        }
+        const msg =
+          res.statusCode === 401
+            ? 'Your Twitch login expired — reconnect your channel in Settings → Twitch accounts.'
+            : code === 'wrong_app'
+              ? 'Your Twitch login came from another app (e.g. SongSeek). Reconnect your channel in Settings → Twitch accounts.'
+              : `The relay answered ${res.statusCode}${code ? ` (${code})` : ''} — retrying.`;
+        setState('error', msg);
+        req.destroy(); // only now — destroying earlier would discard the relay's explanation
+        // Login problems won't fix themselves quickly; a reconnect in Settings retries immediately.
+        retryLater(res.statusCode === 401 || res.statusCode === 403 ? 5 * 60_000 : null);
+      });
+      res.on('error', () => {});
     });
     sock.on('error', (e) => {
-      if (state !== 'error') setState('error', e.message);
+      if (state !== 'error') setState('error', `Can't reach the relay (${e.message}) — retrying.`);
     });
     sock.on('close', (code) => {
       clearInterval(pingTimer);
@@ -250,12 +274,38 @@ export function startModPanel({ send, version = '' }) {
       ws = null;
       if (code === 4000) return setState('error', 'Another Steez for this channel took over the mod panel.');
       if (state === 'online') setState('connecting', 'Reconnecting…');
-      const delay = Math.min(60_000, 2000 * 2 ** retry++);
-      timer = setTimeout(connect, delay);
+      retryLater();
     });
   }
 
-  onAuthChange(() => setTimeout(connect, 500));
+  function retryLater(ms) {
+    if (ws) {
+      ws.removeAllListeners();
+      ws = null;
+    }
+    clearInterval(pingTimer);
+    clearTimeout(timer);
+    timer = setTimeout(connect, ms ?? Math.min(60_000, 2000 * 2 ** retry++));
+    timer.unref?.();
+  }
+
+  // Safety net: if we're enabled but neither connected nor waiting to retry, try again.
+  setInterval(() => {
+    if (P()?.enabled && config.relayUrl && getAccount('broadcaster') && !ws && state !== 'online') {
+      const pending = timer && timer._idleTimeout > 0 && !timer._destroyed;
+      if (!pending) connect();
+    }
+  }, 60_000).unref();
+
+  onAuthChange(() => {
+    retry = 0;
+    setTimeout(connect, 500);
+  });
+  bot.action('modpanel:reconnect', () => {
+    retry = 0;
+    connect();
+    return status();
+  });
   bot.action('modpanel:status', () => status());
   bot.action('modpanel:activity', () => (db.modActivity || []).slice(0, 100));
   bot.action('modpanel:apply', () => {
