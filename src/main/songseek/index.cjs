@@ -88,6 +88,64 @@ async function init(ctx) {
   const bot = ctx.twitch.bot;
   if (bot && !bot.songs) bot.songs = { current: () => overlay.current() };
 
+  // ─── Music controls for the AI and the Mod Panel (bot action registry) ──
+  if (bot?.action) {
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const needSpotify = () => {
+      if (!store.get('spotifyLibraryTokens')) throw new Error('Spotify is not connected in Steez.');
+      return initControl();
+    };
+    // Requests go through the normal song-request pipeline (search, source rules, queue, chat announce).
+    bot.action('songs:request', ({ query, user } = {}) => {
+      const input = String(query || '').trim().slice(0, 300);
+      if (!input) throw new Error('Say which song to play.');
+      send('ss:twitch:request', { user: String(user || 'AI'), input, via: 'ai' });
+      return { queued: input };
+    });
+    bot.action('songs:command', ({ cmd, user } = {}) => {
+      if (!['skip', 'pause', 'resume', 'clearqueue', 'song'].includes(cmd)) throw new Error('Unknown song command');
+      send('ss:twitch:command', { cmd, user: String(user || 'AI'), isMod: true });
+      return { ok: true };
+    });
+    bot.action('songs:nowPlaying', () => {
+      const local = overlay.current?.();
+      const s = control?.state;
+      const t = s?.track;
+      return {
+        track: local?.title ? { title: local.title, artist: local.artist, source: local.source } : t ? { title: t.name || t.title, artist: t.artists || t.artist, source: 'spotify' } : null,
+        isPlaying: !!s?.isPlaying,
+        volume: s?.volumePercent ?? null,
+        device: s?.deviceName || null,
+      };
+    });
+    bot.action('songs:volume', async ({ percent } = {}) => {
+      const p = Math.max(0, Math.min(100, Math.round(Number(percent))));
+      if (!Number.isFinite(p)) throw new Error('Volume must be 0-100.');
+      await needSpotify().setVolume(p);
+      return { volume: p };
+    });
+    bot.action('songs:previous', async () => (await needSpotify().previous(), { ok: true }));
+    bot.action('songs:playlists', async () => {
+      needSpotify();
+      return (await account.playlists(store)).map((p) => ({ name: p.name, tracks: p.trackCount, kind: p.kind }));
+    });
+    bot.action('songs:playPlaylist', async ({ name, shuffle } = {}) => {
+      const c = needSpotify();
+      const want = norm(name);
+      if (!want) throw new Error('Say which playlist.');
+      const lists = await account.playlists(store);
+      const hit = lists.find((p) => norm(p.name) === want) || lists.find((p) => norm(p.name).includes(want)) || lists.find((p) => want.includes(norm(p.name)) && norm(p.name).length > 2);
+      if (!hit) throw new Error(`No playlist called "${name}". Playlists: ${lists.slice(0, 12).map((p) => p.name).join(', ')}`);
+      if (hit.kind === 'liked') {
+        const tracks = await account.playlistTracks(store, 'liked');
+        let uris = tracks.map((t) => t.uri).filter(Boolean);
+        if (shuffle) uris = uris.sort(() => Math.random() - 0.5);
+        await c.playContext({ uris: uris.slice(0, 100) });
+      } else await c.playContext({ contextUri: hit.uri });
+      return { playing: hit.name };
+    });
+  }
+
   // ─── Overlay ────────────────────────────────────────────────────
   overlay.mount(ctx.server.router);
   const overlayFile = overlay.writeOverlayFile(ctx.userData);

@@ -68,6 +68,10 @@ const HELP = {
   'shield.followsPerMinute': 'Shield turns on automatically when follows per minute reach this number (follow-bot attack).',
   'ai.model': 'Haiku answers fastest and costs the least — great for busy chats. Opus gives the best answers. Fable is the most capable but costs the most.',
   'ai.effort': 'How hard the model thinks before replying. Lower is faster and cheaper; Low suits chat replies.',
+  'ai.allowControls': 'Lets the AI take actions in Steez — queue songs, play playlists, run polls and giveaways, the viewer queue, shoutouts, clips and more.',
+  'ai.controlLevel': 'Who can make the AI change things (skip, volume, polls, giveaways, timeouts…).',
+  'ai.songRequests': 'Viewers can ask the AI for songs ("@bot play something chill").',
+  'ai.songRequestLevel': 'Who can request songs through the AI.',
   'ai.respondToMentions': 'Reply when someone @mentions the bot account.',
   'ai.autoTranslate': 'Automatically translate messages written in non-Latin scripts (Cyrillic, CJK, Arabic, ...).',
   'ai.firstMessageSpamCheck': 'Ask the AI whether first-time chatter messages are spam and delete them.',
@@ -94,6 +98,10 @@ const SELECTS = {
     { value: 'high', label: 'High' },
     { value: 'xhigh', label: 'Extra high' },
     { value: 'max', label: 'Max — slowest, most thorough' },
+  ],
+  'ai.controlLevel': [
+    { value: 'moderator', label: 'Moderators and you' },
+    { value: 'broadcaster', label: 'Only you' },
   ],
   'ai.model': [
     { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 — fastest, cheapest' },
@@ -507,15 +515,18 @@ function pageAI(main) {
     ),
   );
   const out = h('div', { class: 'mono', style: 'margin-top:10px;white-space:pre-wrap' });
-  const prompt = h('input', { placeholder: 'Ask the bot something…' });
+  const prompt = h('input', { placeholder: 'Ask or tell it to do something — e.g. "play my chill playlist" or "start a poll: best snack?"' });
   main.append(
     h('div', { class: 'grid2' },
       settingsForm('ai', { title: 'AI settings' }),
       h('div', {},
-        card('Try it', h('div', { class: 'row' }, prompt, btn('Ask', async () => { out.textContent = '…'; const r = await api.action('ai:test', { prompt: prompt.value }); out.textContent = r.reply; }, 'primary')), out),
+        card('Try it', h('div', { class: 'row' }, prompt, btn('Ask', async () => { out.textContent = '…'; const r = await api.action('ai:test', { prompt: prompt.value }); out.textContent = r.reply + (r.actions?.length ? `
+
+Did: ${r.actions.join(', ')}` : ''); }, 'primary')), out),
         card('What the AI can do',
           h('ul', {},
             h('li', {}, h('b', {}, '@mention the bot / !ask'), ' — answers with the context of recent chat, title and game'),
+            h('li', {}, h('b', {}, 'Takes actions'), ' — "@bot play Blinding Lights", "play my gym playlist", "skip", "volume 40", "start a poll…", "giveaway for a Steam key", "next game in the queue", "shout out xyz", "clip that" — limited by who is asking'),
             h('li', {}, h('b', {}, '!catchup [minutes]'), ' — “what did I miss?” summary of chat'),
             h('li', {}, h('b', {}, '!translate'), ' + optional auto-translation of foreign-script messages'),
             h('li', {}, h('b', {}, '${ai prompt}'), ' — use AI inside any custom command (try !roast)'),
