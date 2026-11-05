@@ -1,0 +1,13 @@
+# SteezBot relay (Cloudflare Workers, free tier).
+# Deploy / configure with:  npm run relay:setup
+# The client secret is stored as an encrypted Worker secret (TWITCH_CLIENT_SECRET), never in git.
+name = "steez-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+TWITCH_CLIENT_ID = "dlf5rup2h6khs3zd6raa328q9uuetl"
+BOT_LOGIN = ""
+# Comma-separated Twitch user IDs of channels that may not use SteezBot (abuse kill switch).
+BLOCKED_CHANNELS = ""

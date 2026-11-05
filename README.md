@@ -33,6 +33,33 @@ Once you've checked everything carried over, you can uninstall the old apps.
 
 The SongSeek now-playing overlay keeps its address, `http://127.0.0.1:43112/overlay`, so existing OBS sources keep working. QueueUp's overlays moved to `/overlay/queue` and `/overlay/gifts`.
 
+## SteezBot (shared bot account)
+
+By default the bot's chat replies come from the shared **SteezBot** account, like Nightbot or StreamElements. They carry Twitch's *Chat Bot* badge, and streamers need no bot account of their own. The **relay** behind this is a tiny Cloudflare Worker (`relay/`, free tier). It holds SteezBot's credentials so they never ship inside the app.
+
+**How it works.** Steez sends the relay the message plus the streamer's own Twitch token, which proves they own the channel. The relay:
+- validates the token with Twitch, keeps only a short-lived hash of it, and never stores it;
+- checks that the streamer granted `channel:bot`;
+- rate-limits each channel to 20 messages per 30 seconds;
+- posts through Twitch's chat API as SteezBot.
+
+Moderation (timeouts, deleting messages, shield mode) uses the streamer's own login. If the relay is unreachable, Steez falls back to the streamer's account so chat never goes quiet. Streamers can choose *My account*, or connect a custom bot account, under *Settings → Bot identity*.
+
+**Owner setup (once):**
+1. In the [Twitch developer console](https://dev.twitch.tv/console/apps), the Steez app must be **Confidential**. Click **New Secret** and keep the secret handy.
+2. Run:
+   ```bash
+   npm run relay:setup
+   ```
+   It logs in to Cloudflare, deploys the relay, and asks for the bot username and the client secret.
+3. Log in to Twitch as the bot account, open `<relay-url>/setup`, and click **Authorize**.
+4. Put the relay URL in `BUILTIN_RELAY_URL` in `src/main/main.js`, then ship an update.
+
+**If someone abuses SteezBot:** add their Twitch user ID to `BLOCKED_CHANNELS` in `relay/wrangler.toml`, then run:
+```bash
+npm run relay:deploy
+```
+
 ## Updates
 
 Steez updates itself the way Discord does. On every launch, the start-up screen asks GitHub for a newer release. If there is one, Steez downloads and installs it before the app opens. While Steez is running it re-checks every 30 minutes and offers **Restart to update**. You can switch off the launch check in *Settings → Updates*.

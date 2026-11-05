@@ -15,6 +15,7 @@ export const SCOPES = {
   broadcaster: [
     'chat:read',
     'chat:edit',
+    'channel:bot', // lets the shared SteezBot account chat in this channel (with the Chat Bot badge)
     'channel:manage:broadcast',
     'channel:read:subscriptions',
     'channel:read:redemptions',

@@ -6,3 +6,6 @@ release/
 
 # Optional build-time config with your Twitch Client ID (CI writes it from a secret).
 app-config.json
+
+# Cloudflare wrangler cache
+relay/.wrangler/

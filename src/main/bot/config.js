@@ -5,6 +5,7 @@ export const config = {
   dataDir: process.env.STEEZ_BOT_DATA || 'data',
   publicUrl: process.env.STEEZ_PUBLIC_URL || 'http://127.0.0.1:43112',
   clientId: process.env.STEEZ_TWITCH_CLIENT_ID || '',
+  relayUrl: process.env.STEEZ_RELAY_URL || '', // SteezBot relay (Cloudflare Worker)
   // API keys live in the bot database (db.secrets) and are read through these getters.
   get anthropicKey() {
     return globalThis.__steezSecrets?.anthropicKey || process.env.ANTHROPIC_API_KEY || '';

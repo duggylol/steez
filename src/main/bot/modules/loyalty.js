@@ -7,7 +7,7 @@ import { parseAmount, fmtNum, fmtDuration, normLogin } from '../util.js';
 
 export function init(bot) {
   const L = () => db.settings.loyalty;
-  const ignored = () => new Set([...(db.settings.general.ignoredUsers || []).map(normLogin), bot.state.botLogin]);
+  const ignored = () => new Set([...(db.settings.general.ignoredUsers || []).map(normLogin), bot.state.botLogin, bot.relay?.info?.login]);
 
   bot.rankOf = (u) => {
     if (!u) return null;

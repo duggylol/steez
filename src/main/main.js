@@ -49,6 +49,8 @@ function readAppConfig() {
 // The Steez Twitch application (public client, redirect http://localhost:43111). A Client ID is
 // a public identifier, not a secret — it appears in every Twitch login URL.
 const BUILTIN_TWITCH_CLIENT_ID = 'dlf5rup2h6khs3zd6raa328q9uuetl';
+// SteezBot relay (relay/ — Cloudflare Worker). Empty until deployed with `npm run relay:setup`.
+const BUILTIN_RELAY_URL = '';
 const twitchClientId = () => steez?.get('twitchClientId') || readAppConfig().twitchClientId || BUILTIN_TWITCH_CLIENT_ID;
 
 // ─── Splash ─────────────────────────────────────────────────────
@@ -110,6 +112,7 @@ async function startCore() {
   // Twitch app: a custom one from Settings → app-config.json → the built-in Steez app.
   const songseek = findSongSeek(appData);
   config.clientId = twitchClientId();
+  config.relayUrl = (readAppConfig().relayUrl || BUILTIN_RELAY_URL).replace(/\/$/, '');
 
   const { startBot, connectBot, bot } = await import('./bot/index.js');
   const { storeToken } = await import('./bot/twitch/auth.js');

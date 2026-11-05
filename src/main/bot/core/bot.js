@@ -7,6 +7,7 @@ import { EventSubClient } from '../twitch/eventsub.js';
 import { getAccount, refresh, onAuthChange, actualRole } from '../twitch/auth.js';
 import * as api from '../twitch/api.js';
 import { broadcast } from '../web/hub.js';
+import { createRelay } from '../twitch/relay.js';
 import { sanitizeChat, fmtNum, normLogin } from '../util.js';
 
 export const LEVELS = { everyone: 0, regular: 1, subscriber: 2, vip: 3, moderator: 4, broadcaster: 5 };
@@ -118,7 +119,9 @@ class Bot extends EventEmitter {
     log.chat(`[${this.state.botLogin || 'bot'}] ${t}`);
     this.emit('bot:said', t);
     broadcast('chat:bot', { text: t, t: Date.now() }, { dashboardOnly: true });
-    this.irc.say(t, { replyTo: opts.replyTo, action });
+    // SteezBot (shared bot account via the relay) when chosen; otherwise the IRC connection.
+    if (this.relay?.active()) this.relay.send(t, { replyTo: opts.replyTo }); // (/me is not supported by the chat API)
+    else this.irc.say(t, { replyTo: opts.replyTo, action });
   }
 
   async reply(ctx, text) {
@@ -238,6 +241,7 @@ class Bot extends EventEmitter {
     };
     user.level = this.levelOf(tags, badges, login);
     if ((this.settings.general.ignoredUsers || []).map(normLogin).includes(login)) return;
+    if (this.relay?.info && login === this.relay.info.login) return; // our own SteezBot messages
 
     let isAction = false;
     if (text.startsWith('\x01ACTION ')) {
@@ -389,7 +393,14 @@ class Bot extends EventEmitter {
     this.eventsub.start();
   }
 
+  /** The account viewers see the bot talking as (SteezBot, a custom bot account, or the streamer). */
+  identityLogin() {
+    return this.relay?.active() ? this.relay.info.login : this.state.botLogin;
+  }
+
   async init() {
+    this.relay = createRelay(this);
+    this.relay.refresh();
     this.irc.on('connected', () => {
       this.state.ircConnected = true;
       log.info(`Chat connected as ${this.state.botLogin} in #${this.state.channel}`);
@@ -452,6 +463,7 @@ class Bot extends EventEmitter {
 
   /** Full reconnect after an account was (re)linked from the dashboard. */
   reconnectAll() {
+    this.relay?.refresh();
     this.irc.disconnect();
     this.connectChat();
     this.startEventSub();
@@ -460,6 +472,8 @@ class Bot extends EventEmitter {
 
   status() {
     return {
+      identity: this.identityLogin(),
+      relay: this.relay?.status(),
       live: this.state.live,
       stream: this.state.stream,
       channel: this.state.channel,

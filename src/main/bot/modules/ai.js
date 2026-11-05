@@ -30,7 +30,7 @@ export function init(bot) {
     if (buffer.length > 600) buffer.shift();
   };
   bot.on('chat:raw', (ctx) => add(ctx.user.display, ctx.text));
-  bot.on('bot:said', (t) => add(`${bot.state.botLogin} (bot)`, t));
+  bot.on('bot:said', (t) => add(`${bot.identityLogin()} (bot)`, t));
   bot.on('alert', (a) => add('[stream event]', `${a.user || ''} ${a.type}${a.amount ? ` ${a.amount}` : ''}`));
 
   const recentLines = (n = 30) =>
@@ -126,8 +126,8 @@ export function init(bot) {
   }
 
   bot.on('chat', (ctx) => {
-    if (!A().respondToMentions || !bot.state.botLogin || ctx.text.startsWith(bot.prefix)) return;
-    const name = bot.state.botLogin.toLowerCase();
+    if (!A().respondToMentions || !bot.identityLogin() || ctx.text.startsWith(bot.prefix)) return;
+    const name = bot.identityLogin().toLowerCase();
     const t = ctx.text.toLowerCase();
     if (ctx.user.login === name) return;
     if (t.includes(`@${name}`) || t.startsWith(`${name} `) || t.startsWith(`${name},`)) handleQuestion(ctx, ctx.text);

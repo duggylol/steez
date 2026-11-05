@@ -212,7 +212,7 @@ function pageOverview(main, on) {
     card(
       'Accounts',
       acctRow('broadcaster', 'Your channel', 'Required. Log in with your streaming account.'),
-      acctRow('bot', 'Bot account (optional)', 'Log in with a separate account (e.g. "MyChannelBot") so messages come from it. Without it the bot talks as you. Remember to /mod it.'),
+      acctRow('bot', 'Custom bot account (optional)', 'Replies come from the shared Steez bot by default (Settings → Bot identity). Connect your own bot account only if you want a custom name.'),
       statusBox,
     ),
   );

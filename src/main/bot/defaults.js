@@ -5,6 +5,7 @@ export const defaultSettings = {
     prefix: '!',
     botEnabled: true,
     modsBypassCooldowns: true,
+    botIdentity: 'steezbot', // steezbot (shared SteezBot account) | self (your own account). A connected custom bot account always wins.
     replyStyle: 'mention', // mention | reply (native Twitch reply)
     cooldownMessages: false, // tell users when a command is on cooldown
     regulars: [],

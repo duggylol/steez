@@ -115,8 +115,68 @@ function Accounts({ twitch }) {
   return (
     <Panel title="Twitch accounts">
       {row('broadcaster', 'Your channel', 'Required. Chat, song requests, the queue and the bot all use this login.')}
-      {row('bot', 'Bot account (optional)', 'A second account (e.g. YourNameBot) the bot talks as. Type /mod <name> in your chat after connecting.')}
+      {row('bot', 'Custom bot account (optional)', 'Only if you want your own bot name instead of the shared one. Type /mod <name> in your chat after connecting.')}
       {!state.config.clientIdSet && <div className="help">Save a Twitch Client ID above first.</div>}
+    </Panel>
+  );
+}
+
+function BotIdentity({ twitch }) {
+  const [state, setState] = useState(null);
+  const load = () => api.get('/api/state').then(setState).catch(() => {});
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, [twitch]);
+  if (!state) return null;
+  const relay = state.status.relay || {};
+  const custom = state.auth.bot && !state.auth.bot.expired;
+  const mode = custom ? 'custom' : state.settings.general.botIdentity || 'steezbot';
+  const setMode = async (botIdentity) => {
+    await api.put('/api/settings', { general: { ...state.settings.general, botIdentity } });
+    load();
+  };
+  const reconnect = async () => {
+    toast('Finish the login in your browser');
+    try {
+      await api.post('/api/auth/login/broadcaster');
+      toast('Twitch reconnected');
+    } catch {
+      /* toasted */
+    }
+    load();
+  };
+  const name = relay.bot?.display || 'SteezBot';
+  let line;
+  if (custom) line = `Talking as your bot account ${state.auth.bot.login}. Disconnect it below to use ${name} instead.`;
+  else if (mode === 'self') line = `Bot replies come from your own account (${state.auth.broadcaster?.login || 'not connected'}).`;
+  else if (!relay.configured) line = 'The shared bot is not available in this build — replies come from your account.';
+  else if (relay.missingScope) line = `Reconnect Twitch once to let ${name} chat in your channel.`;
+  else if (relay.active) line = `Replies come from ${name} with Twitch's Chat Bot badge. Nothing else to set up.`;
+  else line = relay.error || `Connecting to ${name}…`;
+  return (
+    <Panel title="Bot identity" actions={relay.active && mode === 'steezbot' && !custom ? <Pill tone="good">{name} active</Pill> : null}>
+      <div className="row" style={{ marginBottom: 10 }}>
+        <div className="seg">
+          <button className={mode === 'steezbot' ? 'active' : ''} disabled={custom} onClick={() => setMode('steezbot')}>
+            {name}
+          </button>
+          <button className={mode === 'self' ? 'active' : ''} disabled={custom} onClick={() => setMode('self')}>
+            My account
+          </button>
+          <button className={mode === 'custom' ? 'active' : ''} disabled>
+            Custom bot
+          </button>
+        </div>
+        {relay.missingScope && mode === 'steezbot' && !custom && (
+          <Button size="sm" variant="primary" onClick={reconnect}>
+            Reconnect Twitch
+          </Button>
+        )}
+      </div>
+      <div className="faint small">{line}</div>
+      <div className="help">Moderation (timeouts, deleting messages, shield mode) always uses your own login, so the bot doesn't need to be a mod.</div>
     </Panel>
   );
 }
@@ -252,6 +312,7 @@ export default function Settings({ twitch, update }) {
           <div>
             <TwitchApp settings={settings} setSettings={setSettings} />
             <Accounts twitch={twitch} />
+            <BotIdentity twitch={twitch} />
             <ApiKeys />
           </div>
           <div>
