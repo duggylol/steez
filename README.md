@@ -46,14 +46,16 @@ By default the bot's chat replies come from the shared **SteezBot** account, lik
 Moderation (timeouts, deleting messages, shield mode) uses the streamer's own login. If the relay is unreachable, Steez falls back to the streamer's account so chat never goes quiet. Streamers can choose *My account*, or connect a custom bot account, under *Settings → Bot identity*.
 
 **Owner setup (once):**
-1. In the [Twitch developer console](https://dev.twitch.tv/console/apps), the Steez app must be **Confidential**. Click **New Secret** and keep the secret handy.
-2. Run:
+1. Run:
    ```bash
    npm run relay:setup
    ```
-   It logs in to Cloudflare, deploys the relay, and asks for the bot username and the client secret.
-3. Log in to Twitch as the bot account, open `<relay-url>/setup`, and click **Authorize**.
-4. Put the relay URL in `BUILTIN_RELAY_URL` in `src/main/main.js`, then ship an update.
+   A setup page opens in your browser at `http://127.0.0.1:43210` and checks each step as you go:
+   - Cloudflare login and your workers.dev address
+   - Twitch app (Confidential) and its client secret, plus the bot username
+   - deploying the relay
+   - authorizing the bot account
+2. Put the relay URL from `relay/deployed.json` in `BUILTIN_RELAY_URL` in `src/main/main.js`, then ship an update.
 
 **If someone abuses SteezBot:** add their Twitch user ID to `BLOCKED_CHANNELS` in `relay/wrangler.toml`, then run:
 ```bash

@@ -21,7 +21,7 @@
     "release": "npm run build && electron-builder --win --publish always",
     "ship:patch": "npm version patch && git push --follow-tags",
     "ship:minor": "npm version minor && git push --follow-tags",
-    "relay:setup": "node scripts/setup-relay.mjs",
+    "relay:setup": "node scripts/relay-wizard.mjs",
     "relay:deploy": "cd relay && npx --yes wrangler@4 deploy"
   },
   "dependencies": {
