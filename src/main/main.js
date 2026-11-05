@@ -48,9 +48,9 @@ function readAppConfig() {
 
 // The Steez Twitch application (public client, redirect http://localhost:43111). A Client ID is
 // a public identifier, not a secret — it appears in every Twitch login URL.
-const BUILTIN_TWITCH_CLIENT_ID = 'dlf5rup2h6khs3zd6raa328q9uuetl';
+const BUILTIN_TWITCH_CLIENT_ID = 'ozc63b300yxoa4w6vwygci39njppml';
 // SteezBot relay (relay/ — Cloudflare Worker). Empty until deployed with `npm run relay:setup`.
-const BUILTIN_RELAY_URL = '';
+const BUILTIN_RELAY_URL = 'https://steez-relay.steezbot.workers.dev';
 const twitchClientId = () => steez?.get('twitchClientId') || readAppConfig().twitchClientId || BUILTIN_TWITCH_CLIENT_ID;
 
 // ─── Splash ─────────────────────────────────────────────────────

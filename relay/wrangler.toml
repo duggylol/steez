@@ -7,7 +7,7 @@ compatibility_date = "2026-10-01"
 workers_dev = true
 
 [vars]
-TWITCH_CLIENT_ID = "dlf5rup2h6khs3zd6raa328q9uuetl"
+TWITCH_CLIENT_ID = "ozc63b300yxoa4w6vwygci39njppml"
 BOT_LOGIN = "steezzzbot"
 # Comma-separated Twitch user IDs of channels that may not use SteezBot (abuse kill switch).
 BLOCKED_CHANNELS = ""

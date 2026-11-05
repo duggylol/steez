@@ -81,7 +81,7 @@ Steez updates itself the way Discord does. On every launch, the start-up screen 
 
 ### Twitch app
 
-Steez ships with a built-in Twitch app (Client ID `dlf5rup2h6khs3zd6raa328q9uuetl`). In the [Twitch developer console](https://dev.twitch.tv/console/apps), it must keep:
+Steez ships with a built-in Twitch app (Client ID `ozc63b300yxoa4w6vwygci39njppml`). In the [Twitch developer console](https://dev.twitch.tv/console/apps), it must keep:
 - OAuth Redirect URL: `http://localhost:43111`
 - Client Type: *Public*
 

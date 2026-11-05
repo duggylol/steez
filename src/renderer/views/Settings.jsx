@@ -152,6 +152,7 @@ function BotIdentity({ twitch }) {
   if (custom) line = `Talking as your bot account ${state.auth.bot.login}. Disconnect it below to use ${name} instead.`;
   else if (mode === 'self') line = `Bot replies come from your own account (${state.auth.broadcaster?.login || 'not connected'}).`;
   else if (!relay.configured) line = 'The shared bot is not available in this build — replies come from your account.';
+  else if (!state.auth.broadcaster || state.auth.broadcaster.expired) line = `Connect your channel above — the bot's replies will come from ${name}.`;
   else if (relay.missingScope) line = `Reconnect Twitch once to let ${name} chat in your channel.`;
   else if (relay.active) line = `Replies come from ${name} with Twitch's Chat Bot badge. Nothing else to set up.`;
   else line = relay.error || `Connecting to ${name}…`;
