@@ -31,6 +31,10 @@ module.exports = ({ contextBridge, ipcRenderer, listen }) => {
     statsStyle: call('qu:tiktokStats:style'),
     statsResetStyle: call('qu:tiktokStats:resetStyle'),
     statsReset: call('qu:tiktokStats:reset'),
+    widgetStyleUpdate: (widget, patch) => ipcRenderer.invoke('qu:widgetStyle:update', { widget, patch }),
+    widgetStylePreset: (widget, preset) => ipcRenderer.invoke('qu:widgetStyle:preset', { widget, preset }),
+    widgetStyleReset: (widget) => ipcRenderer.invoke('qu:widgetStyle:reset', { widget }),
+    widgetStyleMatchAll: (preset) => ipcRenderer.invoke('qu:widgetStyle:matchAll', { preset }),
 
     copy: call('qu:util:copy'),
     openExternal: call('qu:util:openExternal'),

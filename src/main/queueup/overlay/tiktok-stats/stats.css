@@ -1,86 +1,59 @@
 /* ============================================================
-   Steez TikTok rank + Gift Gallery badges (OBS browser sources)
-   Clean and sharp: dark translucent panel, light text, square
-   corners, 1px lines, no gradients. Colours, opacity and scale are
-   CSS variables pushed live from the app.
-   Designed for a 260 x 110 browser source at scale 1.
+   Steez TikTok rank + Gift Gallery badges — structure.
+   The look of each preset lives in /overlay/kit/themes.css; this is
+   only the layout every theme starts from. Designed for a 244px-wide
+   badge (the "width" setting) inside 8px of padding, scaled from the
+   top left.
    ============================================================ */
 
-:root {
-  --accent: #d4d4d4;
-  --text: #f2f2f2;
-  --bg: 18, 18, 18;      /* panel background as r,g,b */
-  --bg-opacity: 0.82;
-  --scale: 1;
-  --font: "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif;
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body {
-  background: transparent !important;
-  overflow: hidden;
-  font-family: var(--font);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-}
-
-body { padding: 8px; }
-
-.stage {
-  width: 244px;
-  transform: scale(var(--scale));
-  transform-origin: top left;
-}
+body.k-badge { padding: 8px; }
 
 .badge {
-  position: relative;
-  padding: 9px 14px 10px 17px;
-  background: rgba(var(--bg), var(--bg-opacity));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--sp));
+  padding: calc(9px * var(--sp)) calc(14px * var(--sp)) calc(10px * var(--sp)) calc(17px * var(--sp));
+  background: rgba(var(--bg), var(--bg-a));
+  border: var(--bw) solid rgba(var(--text-rgb), .14);
+  border-radius: var(--radius);
 }
 
-/* A thin accent rule down the left edge. */
-.badge::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--accent);
-}
+.w-body { flex: 1; min-width: 0; }
 
-.label {
+.w-label {
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: .16em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--label-c);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
 }
 
-.value {
+.w-value {
   font-size: 38px;
-  font-weight: 700;
+  font-weight: var(--weight);
   line-height: 1.05;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
   white-space: nowrap;
-  overflow: hidden;
+  /* clip sideways only, so a number that hops up isn't cut off */
+  overflow-x: clip;
+  overflow-y: visible;
   text-overflow: ellipsis;
-  transform-origin: left center;
-  margin-top: 2px;
+  margin-top: calc(2px * var(--sp));
 }
+.w-value .num { transform-origin: left center; }
+.w-value .of { font-size: .5em; font-weight: 600; opacity: .6; margin-left: .12em; letter-spacing: 0; }
+.w-value .of:empty { display: none; }
 
 /* "Unranked" / "—" sit quieter than a real number. */
-body.empty .value { font-size: 26px; line-height: 1.535; color: rgba(255, 255, 255, 0.62); }
+body.empty .w-value { font-size: 26px; line-height: 1.535; color: rgba(var(--text-rgb), .62); }
 
-.sub {
+.w-sub {
   font-size: 11.5px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--text-rgb), .6);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -88,38 +61,60 @@ body.empty .value { font-size: 26px; line-height: 1.535; color: rgba(255, 255, 2
   line-height: 1.3;
   margin-top: 1px;
 }
-.sub:empty { display: none; }
+.w-sub:empty { display: none; }
 
-.bar {
+.w-bar {
   height: 3px;
-  margin-top: 7px;
-  background: rgba(255, 255, 255, 0.14);
+  margin-top: calc(7px * var(--sp));
+  background: rgba(var(--text-rgb), .14);
   overflow: hidden;
 }
-.bar i {
+.w-bar i {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--accent);
-  transition: width 0.5s cubic-bezier(.2, .8, .2, 1);
+  background: var(--c1);
+  transition: width calc(.6s * var(--k)) cubic-bezier(.2, .8, .2, 1);
 }
 
-body.no-label .label { display: none; }
-body.no-bar .bar { display: none; }
+body.no-label .w-label { display: none; }
+body.no-bar .w-bar { display: none; }
 
-/* Subtle bump when the number changes. */
-.value.bump { animation: bump 0.42s cubic-bezier(.2, .8, .2, 1); }
-@keyframes bump {
-  0% { transform: scale(1); }
-  35% { transform: scale(1.12); }
-  100% { transform: scale(1); }
+/* Optional emblem on the left: a trophy (rank) or a gift box (gallery). */
+.w-icon {
+  flex: none;
+  width: 38px; height: 38px;
+  display: none;
+  place-items: center;
+  color: var(--c1);
 }
-.badge.flash { animation: flash 0.6s ease-out; }
-@keyframes flash {
-  from { border-color: var(--accent); }
+.has-icon .w-icon { display: grid; }
+.w-icon svg {
+  width: 24px; height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .value.bump, .badge.flash { animation: none; }
-  .bar i { transition: none; }
+/* Orbit ring around the emblem, with two riders. */
+.w-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--c2-rgb), .45);
+  display: none;
 }
+.fx-ring .w-ring { display: block; }
+.w-ring b {
+  position: absolute;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--c2);
+  box-shadow: 0 0 8px var(--c2);
+  top: -3px; left: calc(50% - 2.5px);
+}
+.w-ring b + b { top: auto; bottom: -3px; background: var(--c1); box-shadow: 0 0 8px var(--c1); }
+body:not([data-idle="none"]) .w-ring { animation: kit-orbit calc(9s * var(--k)) linear infinite; }
+@keyframes kit-orbit { to { transform: rotate(360deg); } }

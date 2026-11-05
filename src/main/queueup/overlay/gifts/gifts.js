@@ -1,31 +1,37 @@
 /* ============================================================
    Steez TikTok gifts — OBS overlay client
    Shows the biggest gift combo and the top gifter, alternating,
-   and jumps to a combo while it's being tapped. Live over /queueup-ws.
+   and jumps to a combo while it's being tapped. Live over /queueup-ws;
+   the look comes from the gift overlay's widget style (see /overlay/kit).
    ============================================================ */
 'use strict';
 
-const $ = id => document.getElementById(id);
+const Kit = window.SteezKit;
+const $ = (id) => document.getElementById(id);
 const els = {
-  panel: $('panel'), titleText: $('titleText'), medallion: $('medallion'), coinFace: $('coinFace'),
+  stage: $('stage'), card: $('card'), panel: $('panel'), titleText: $('titleText'), coinFace: $('coinFace'),
   coinBadge: $('coinBadge'), name: $('name'), statValue: $('statValue'), statLabel: $('statLabel'),
-  sub: $('sub'), emptyText: $('emptyText'), sparkles: $('sparkles')
+  sub: $('sub'), emptyText: $('emptyText'), sparkles: $('sparkles'), pop: $('pop'),
+};
+
+// Shown in the app's previews while there are no gifts yet.
+const SAMPLE = {
+  topStreak: { login: 'beststreamerever', name: 'BestStreamerEver', giftId: 'rose', giftName: 'Rose', giftGlyph: '🌹', count: 48, diamonds: 48 },
+  topGifters: [{ login: 'jeffunderdog', name: 'jeffunderdog', avatar: '', diamonds: 1250, gifts: 31 }],
+  liveStreak: null,
 };
 
 let cfg = null;
-let data = null;
+let data = null;              // last gift snapshot from Steez
+let demoData = null;          // fake snapshot while a preview animation plays
 let view = 'streak';          // what is on screen now
 let rotateTimer = null;
 let liveHoldUntil = 0;
-let lastShownValue = null;
+let lastNum = null;           // the number on screen, for count-ups
 let lastKey = '';
+let demoTimers = [];
 
 /* ------------------------------------------------------------------ */
-
-function hexToRgb(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || ''));
-  return m ? `${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}` : '11, 13, 20';
-}
 
 function fmt(n) {
   n = Number(n) || 0;
@@ -40,18 +46,14 @@ function hashHue(str) {
   return h;
 }
 
-function seedSparkles() {
-  const box = els.sparkles;
-  box.innerHTML = '';
-  for (let i = 0; i < 18; i++) {
-    const s = document.createElement('i');
-    if (i % 5 === 0) s.className = 'big';
-    s.style.left = (4 + Math.random() * 92) + '%';
-    s.style.top = (10 + Math.random() * 85) + '%';
-    s.style.setProperty('--dur', (4 + Math.random() * 5).toFixed(2) + 's');
-    s.style.setProperty('--delay', (-Math.random() * 8).toFixed(2) + 's');
-    box.appendChild(s);
-  }
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function current() {
+  if (demoData) return demoData;
+  const empty = !data || (!data.topStreak && !(data.topGifters && data.topGifters.length) && !data.liveStreak);
+  return empty && Kit.editor ? SAMPLE : data;
 }
 
 /* ------------------------------------------------------------------ */
@@ -59,31 +61,16 @@ function seedSparkles() {
 /* ------------------------------------------------------------------ */
 
 function applyConfig(ov) {
-  cfg = ov;
-  const r = document.documentElement.style;
-  r.setProperty('--accent', ov.accent);
-  r.setProperty('--accent2', ov.accent2);
-  r.setProperty('--text', ov.textColor);
-  r.setProperty('--bg', hexToRgb(ov.bg));
-  r.setProperty('--bg-opacity', ov.bgOpacity);
-  r.setProperty('--radius', ov.radius + 'px');
-  r.setProperty('--width', ov.width + 'px');
-  r.setProperty('--scale', ov.scale);
-  r.setProperty('--font', `"${ov.fontFamily}", Inter, "Segoe UI", system-ui, sans-serif`);
-
+  cfg = ov || {};
+  const replay = Kit.applyLook(cfg);
   const b = document.body;
-  b.classList.toggle('has-bg', Number(ov.bgOpacity) > 0.02);
-  b.classList.toggle('no-title', !ov.showTitle);
-  b.classList.toggle('ring', !!ov.ring);
-  b.classList.toggle('particles', !!ov.particles);
-  b.classList.toggle('glow', !!ov.glow);
-  b.classList.toggle('no-sub', !ov.showGiftName && !ov.showDiamonds);
+  b.classList.toggle('no-title', cfg.showTitle === false);
+  b.classList.toggle('no-sub', !cfg.showGiftName && !cfg.showDiamonds);
+  els.emptyText.textContent = cfg.emptyText || '';
 
-  els.emptyText.textContent = ov.emptyText || '';
-
-  if (ov.mode !== 'both') view = ov.mode;
+  if (cfg.mode !== 'both') view = cfg.mode || 'streak';
   scheduleRotate();
-  render(true);
+  render(replay);
 }
 
 function scheduleRotate() {
@@ -92,8 +79,9 @@ function scheduleRotate() {
   if (!cfg || cfg.mode !== 'both') return;
   const secs = Math.max(3, Number(cfg.rotateSeconds) || 8);
   rotateTimer = setInterval(() => {
-    if (Date.now() < liveHoldUntil) return;      // don't rotate away from a live combo
-    if (!data || (!data.topStreak && !data.topGifters?.length)) return;
+    if (Date.now() < liveHoldUntil || demoData) return; // don't rotate away from a live combo
+    const d = current();
+    if (!d || (!d.topStreak && !(d.topGifters && d.topGifters.length))) return;
     swapTo(view === 'streak' ? 'gifter' : 'streak');
   }, secs * 1000);
 }
@@ -102,30 +90,30 @@ let swapping = false;
 function swapTo(next) {
   if (next === view || swapping) return;
   swapping = true;
-  els.panel.classList.remove('enter');
+  els.panel.classList.remove('in');
   els.panel.classList.add('out');
   setTimeout(() => {
     view = next;
     els.panel.classList.remove('out');
-    render(true);          // render(true) restarts the entry animation itself
+    render(true); // render(true) plays the entrance itself
     swapping = false;
-  }, 300);
+  }, 300 / Math.max(0.25, Number(cfg && cfg.speed) || 1));
 }
 
 /* ------------------------------------------------------------------ */
 /* rendering                                                          */
 /* ------------------------------------------------------------------ */
 
-function paintFace(url, fallbackText, round) {
+function paintFace(url, fallbackText, round, glyph) {
   const face = els.coinFace;
   if (!url) {
-    face.innerHTML = round
-      ? `<span class="letter">${escapeHtml(fallbackText)}</span>`
-      : '<span class="glyph">🎁</span>';
+    const key = 'none:' + (round ? fallbackText : glyph || '');
+    if (face.dataset.src === key) return;
+    face.dataset.src = key;
+    face.innerHTML = round ? `<span class="letter">${escapeHtml(fallbackText)}</span>` : `<span class="glyph">${escapeHtml(glyph || '🎁')}</span>`;
     face.style.background = round
       ? `linear-gradient(140deg,hsl(${hashHue(fallbackText)} 70% 55%),hsl(${(hashHue(fallbackText) + 40) % 360} 65% 42%))`
       : '';
-    face.dataset.src = '';
     return;
   }
   if (face.dataset.src === url) return;
@@ -136,34 +124,39 @@ function paintFace(url, fallbackText, round) {
   img.alt = '';
   img.className = round ? 'round' : '';
   img.onload = () => { if (face.dataset.src === url) img.classList.add('shown'); };
-  img.onerror = () => { if (face.dataset.src === url) paintFace('', fallbackText, round); };
+  img.onerror = () => { if (face.dataset.src === url) paintFace('', fallbackText, round, glyph); };
   img.src = url;
   face.appendChild(img);
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function setValue(text) {
+/** Shows the number; on the same view a change counts up and plays the change animation. */
+function setValue(n, prefix, sameView) {
   const el = els.statValue;
-  if (el.textContent === text) return;
-  el.textContent = text;
-  if (lastShownValue !== null) {
-    el.classList.remove('bump');
-    void el.offsetWidth;
-    el.classList.add('bump');
+  const text = prefix + fmt(n);
+  const prev = lastNum;
+  lastNum = n;
+  if (!sameView || prev === null) {
+    Kit.stopCount(el);
+    el.textContent = text;
+    return;
   }
-  lastShownValue = text;
+  if (prev === n) return;
+  if (cfg.countUp) Kit.countTo(el, prev, n, (v) => prefix + fmt(v), 420);
+  else {
+    Kit.stopCount(el);
+    el.textContent = text;
+  }
+  els.pop.textContent = n > prev ? '+' + fmt(n - prev) : '';
+  Kit.change(els.card);
 }
 
 function render(forceEnter) {
   if (!cfg) return;
+  const d = current();
   const b = document.body;
-  const hasStreak = !!(data && data.topStreak);
-  const hasGifter = !!(data && data.topGifters && data.topGifters.length);
-  const live = data && data.liveStreak && cfg.showLiveStreak ? data.liveStreak : null;
+  const hasStreak = !!(d && d.topStreak);
+  const hasGifter = !!(d && d.topGifters && d.topGifters.length);
+  const live = d && d.liveStreak && (cfg.showLiveStreak || d === demoData) ? d.liveStreak : null;
 
   b.classList.toggle('is-empty', !hasStreak && !hasGifter && !live);
   if (!hasStreak && !hasGifter && !live) return;
@@ -184,51 +177,59 @@ function render(forceEnter) {
 
   let key;
   if (showing === 'streak') {
-    const s = live || data.topStreak;
+    const s = live || d.topStreak;
+    key = 'streak:' + s.login + ':' + s.giftId + ':' + (live ? 'live' : 'top');
+    const same = key === lastKey && !forceEnter;
     els.titleText.textContent = cfg.streakTitle || 'TOP STREAK';
     els.coinBadge.textContent = live ? '🔥' : '★';
-    paintFace(s.giftImage, s.giftName || 'Gift', false);
+    paintFace(s.giftImage, s.giftName || 'Gift', false, s.giftGlyph);
     els.name.textContent = s.name || s.login;
-    setValue('x' + fmt(s.count));
+    setValue(s.count, 'x', same);
     els.statLabel.textContent = 'Streak';
     const parts = [];
     if (cfg.showGiftName && s.giftName) parts.push(s.giftName);
     if (cfg.showDiamonds && s.diamonds) parts.push('◆ ' + fmt(s.diamonds));
     els.sub.textContent = parts.join('  ·  ');
-    key = 'streak:' + s.login + ':' + s.giftId + ':' + (live ? 'live' : 'top');
-    if (live && lastKey === key) {
-      els.medallion.classList.remove('punch');
-      void els.medallion.offsetWidth;
-      els.medallion.classList.add('punch');
-    }
   } else {
-    const g = data.topGifters[0];
+    const g = d.topGifters[0];
+    key = 'gifter:' + g.login;
+    const same = key === lastKey && !forceEnter;
     els.titleText.textContent = cfg.gifterTitle || 'TOP GIFTER';
     els.coinBadge.textContent = '👑';
     paintFace(cfg.showAvatar ? g.avatar : '', (g.name || g.login || '?').charAt(0).toUpperCase(), true);
     els.name.textContent = g.name || g.login;
-    setValue(fmt(g.diamonds));
+    setValue(g.diamonds, '', same);
     els.statLabel.textContent = 'Diamonds';
     els.sub.textContent = cfg.showGiftName ? `${fmt(g.gifts)} gift${g.gifts === 1 ? '' : 's'} this stream` : '';
-    key = 'gifter:' + g.login;
   }
 
-  if (forceEnter || key !== lastKey) {
-    lastShownValue = null;
-    els.panel.classList.remove('enter');
-    void els.panel.offsetWidth;
-    els.panel.classList.add('enter');
-    setTimeout(() => els.panel.classList.remove('enter'), 520);
-  }
+  if (forceEnter || key !== lastKey) Kit.entrance(els.panel);
   lastKey = key;
 }
 
 /* ------------------------------------------------------------------ */
-/* live connection                                                    */
+/* preview animation (only ever triggered by the Steez editor)        */
 /* ------------------------------------------------------------------ */
 
-let ws = null;
-let retry = 0;
+/** A fake combo climbing x1 → x18 on top of whatever is showing, then back. */
+function playDemo() {
+  demoTimers.forEach(clearTimeout);
+  const base = current() || SAMPLE;
+  const combo = { login: 'demo', name: 'BestStreamerEver', giftId: 'demo-rose', giftName: 'Rose', giftGlyph: '🌹', count: 1, diamonds: 1 };
+  const frame = (n) => ({ ...base, liveStreak: { ...combo, count: n, diamonds: n } });
+  demoData = frame(1);
+  render(true);
+  const taps = 18;
+  demoTimers = [];
+  for (let n = 2; n <= taps; n++) {
+    demoTimers.push(setTimeout(() => { demoData = frame(n); render(false); }, 500 + (n - 1) * 150));
+  }
+  demoTimers.push(setTimeout(() => { demoData = null; liveHoldUntil = 0; lastKey = ''; render(true); }, 500 + taps * 150 + 2200));
+}
+
+/* ------------------------------------------------------------------ */
+/* boot                                                               */
+/* ------------------------------------------------------------------ */
 
 function handle(msg) {
   if (!msg || msg.type !== 'gifts') return;
@@ -237,22 +238,13 @@ function handle(msg) {
   else render(false);
 }
 
-function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/queueup-ws`);
-  ws.onopen = () => { retry = 0; };
-  ws.onmessage = ev => {
-    let msg;
-    try { msg = JSON.parse(ev.data); } catch (_) { return; }
-    handle(msg);
-  };
-  ws.onclose = () => {
-    retry = Math.min(retry + 1, 6);
-    setTimeout(connect, Math.min(500 * Math.pow(2, retry - 1), 8000));
-  };
-  ws.onerror = () => { try { ws.close(); } catch (_) {} };
-}
+Kit.seedSparkles(els.sparkles, 18);
+Kit.onDemo(playDemo);
+Kit.reportSize(els.stage);
 
-seedSparkles();
-fetch('/overlay/gifts/api/state').then(r => r.json()).then(s => handle({ type: 'gifts', ...s })).catch(() => {});
-connect();
+if (Kit.thumb) {
+  Kit.loadPreset('gifts', Kit.thumb).then(applyConfig).catch(() => {});
+} else {
+  fetch('/overlay/gifts/api/state').then((r) => r.json()).then((s) => handle({ type: 'gifts', ...s })).catch(() => {});
+  Kit.connect(handle);
+}

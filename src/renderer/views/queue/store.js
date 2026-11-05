@@ -17,6 +17,7 @@ export const useQU = create(() => ({
   logs: [], // newest first
   baseUrl: '',
   overlayPaths: { queue: '/overlay/queue', gifts: '/overlay/gifts', tiktokRank: '/overlay/tiktok-rank', tiktokGallery: '/overlay/tiktok-gallery' },
+  widgetKit: null, // presets + option lists for the TikTok widget styles (main: widgetStyles.cjs)
 }));
 
 const hq = () => window.hq;
@@ -27,14 +28,26 @@ const LOG_KEEP = 120;
 // slider being dragged never jumps back to an older value.
 const pending = { overlay: {}, giftOverlay: {} };
 const pendingTimers = {};
-// Same idea for the rank/gallery badges: their style and the manual values.
-const statsPending = { style: {}, manual: {} };
+// Same idea for the rank/gallery badges: each badge's style and the manual values.
+// 'style' is the rank badge's style (see tiktokStats.cjs), 'galleryStyle' the gallery's.
+const statsPending = { style: {}, galleryStyle: {}, manual: {} };
 const statsTimers = {};
 
 function withStatsPending(ts) {
   if (!ts) return ts;
-  return { ...ts, style: { ...ts.style, ...statsPending.style }, manual: { ...ts.manual, ...statsPending.manual } };
+  return {
+    ...ts,
+    style: { ...ts.style, ...statsPending.style },
+    galleryStyle: { ...ts.galleryStyle, ...statsPending.galleryStyle },
+    manual: { ...ts.manual, ...statsPending.manual },
+  };
 }
+
+const sendStats = {
+  style: (patch) => hq().widgetStyleUpdate('rank', patch),
+  galleryStyle: (patch) => hq().widgetStyleUpdate('gallery', patch),
+  manual: (patch) => hq().statsManual(patch),
+};
 
 // Called synchronously before a new party/queue lands (used to animate reordering).
 const beforeListChange = new Set();
@@ -71,23 +84,22 @@ export function startQU() {
   hq().onTiktokStats((p) => p && p.tiktokStats && useQU.setState({ tiktokStats: withStatsPending(p.tiktokStats) }));
 }
 
-/** Edits the rank/gallery badges: kind 'style' (look) or 'manual' (override values). */
+/**
+ * Edits the rank/gallery badges: kind 'style' (rank badge look), 'galleryStyle' (gallery
+ * badge look) or 'manual' (override values).
+ */
 export function editStats(kind, patch) {
   Object.assign(statsPending[kind], patch);
   useQU.setState((st) => (st.tiktokStats ? { tiktokStats: { ...st.tiktokStats, [kind]: { ...st.tiktokStats[kind], ...patch } } } : {}));
   clearTimeout(statsTimers[kind]);
-  statsTimers[kind] = setTimeout(() => {
-    const send = statsPending[kind];
-    statsPending[kind] = {};
-    (kind === 'style' ? hq().statsStyle : hq().statsManual)(send);
-  }, 90);
+  statsTimers[kind] = setTimeout(() => flushStats(kind), 90);
 }
 
-export async function resetStatsStyle() {
-  clearTimeout(statsTimers.style);
-  statsPending.style = {};
-  const next = await hq().statsResetStyle();
-  useQU.setState({ tiktokStats: withStatsPending(next) });
+function flushStats(kind) {
+  clearTimeout(statsTimers[kind]);
+  const send = statsPending[kind];
+  statsPending[kind] = {};
+  return Object.keys(send).length ? sendStats[kind](send) : Promise.resolve();
 }
 
 /** Forgets the rank and gallery values TikTok sent; manual values and the look stay. */
@@ -108,11 +120,84 @@ export function editStyle(kind, patch) {
   }, 90);
 }
 
+function flushStyle(kind) {
+  clearTimeout(pendingTimers[kind]);
+  const send = pending[kind];
+  pending[kind] = {};
+  if (!Object.keys(send).length) return Promise.resolve();
+  return kind === 'overlay' ? hq().updateOverlay(send) : hq().updateGiftOverlay(send);
+}
+
 export async function resetStyle(kind) {
   clearTimeout(pendingTimers[kind]);
   pending[kind] = {};
   const next = await (kind === 'overlay' ? hq().resetOverlay() : hq().resetGiftOverlay());
   useQU.setState({ [kind]: next });
+}
+
+/* ─── TikTok widget styles: 'gifts', 'rank' and 'gallery' ─── */
+
+const STATS_KIND = { rank: 'style', gallery: 'galleryStyle' };
+
+/** The style object for one widget out of the store state. */
+export function widgetStyleOf(st, widget) {
+  if (widget === 'gifts') return st.giftOverlay;
+  return st.tiktokStats ? st.tiktokStats[STATS_KIND[widget]] : null;
+}
+
+function setWidgetStyle(widget, style) {
+  if (!style) return;
+  if (widget === 'gifts') useQU.setState({ giftOverlay: style });
+  else useQU.setState((st) => (st.tiktokStats ? { tiktokStats: { ...st.tiktokStats, [STATS_KIND[widget]]: style } } : {}));
+}
+
+/** Sends any edit still waiting in the debounce, so a preset switch can't be undone by it. */
+function flushWidget(widget) {
+  return widget === 'gifts' ? flushStyle('giftOverlay') : flushStats(STATS_KIND[widget]);
+}
+
+/** A tweak on top of the preset (applied at once, sent debounced). */
+export function editWidget(widget, patch) {
+  if (widget === 'gifts') editStyle('giftOverlay', patch);
+  else editStats(STATS_KIND[widget], patch);
+}
+
+/** The preset's look for a widget, from the kit the main process sent. */
+export function presetLookFor(widget, presetId) {
+  const kit = useQU.getState().widgetKit;
+  const p = kit && kit.presets.find((x) => x.id === presetId);
+  return p ? { ...p.looks[widget], preset: p.id } : null;
+}
+
+/** Picks a preset, or with no id puts the current preset's look back ("Reset to preset"). */
+export async function pickPreset(widget, presetId) {
+  await flushWidget(widget);
+  const cur = widgetStyleOf(useQU.getState(), widget);
+  const look = presetLookFor(widget, presetId || cur?.preset);
+  if (cur && look) setWidgetStyle(widget, { ...cur, ...look });
+  setWidgetStyle(widget, await hq().widgetStylePreset(widget, presetId || undefined));
+}
+
+/** Puts all three widgets on the same preset so they match. */
+export async function matchAllWidgets(presetId) {
+  const widgets = ['gifts', 'rank', 'gallery'];
+  await Promise.all(widgets.map(flushWidget));
+  const out = await hq().widgetStyleMatchAll(presetId);
+  if (out) widgets.forEach((w) => setWidgetStyle(w, out[w]));
+}
+
+/** Everything back to the widget's defaults (content too). */
+export async function resetWidget(widget) {
+  await flushWidget(widget);
+  setWidgetStyle(widget, await hq().widgetStyleReset(widget));
+}
+
+/** Look keys changed since the preset was picked. */
+export function modifiedKeys(widget, style) {
+  const kit = useQU.getState().widgetKit;
+  const look = style && presetLookFor(widget, style.preset);
+  if (!kit || !look) return [];
+  return kit.lookKeys.filter((k) => k in style && style[k] !== look[k]);
 }
 
 /** Updates queue rules; the main process echoes the result back as qu:state. */

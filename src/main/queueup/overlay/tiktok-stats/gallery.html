@@ -3,17 +3,32 @@
 <head>
 <meta charset="utf-8" />
 <title>Steez TikTok Gift Gallery</title>
+<link rel="stylesheet" href="/overlay/kit/kit.css" />
 <link rel="stylesheet" href="/overlay/tiktok-stats/stats.css" />
+<link rel="stylesheet" href="/overlay/kit/themes.css" />
 </head>
-<body data-kind="gallery" class="empty">
-  <div class="stage">
-    <div class="badge" id="badge">
-      <div class="label" id="label">GIFT GALLERY</div>
-      <div class="value" id="value">—</div>
-      <div class="sub" id="sub"></div>
-      <div class="bar" id="bar"><i id="fill"></i></div>
+<body data-kind="gallery" class="k-badge empty" data-theme="steez" data-entrance="rise" data-change="bump" data-idle="none">
+  <div class="stage" id="stage">
+    <div class="w-motion">
+      <div class="w badge" id="badge">
+        <div class="w-glow" aria-hidden="true"></div>
+        <div class="w-fx" aria-hidden="true"><div class="sparkles" id="sparkles"></div><i class="w-sweep"></i><i class="w-stripes"></i></div>
+        <div class="w-icon" aria-hidden="true">
+          <i class="w-ring"><b></b><b></b></i>
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="9.5" width="17" height="11"/><rect x="2.5" y="6.5" width="19" height="3.2"/><path d="M12 6.5v14"/><path d="M12 6.4C10.8 3 6.6 2.8 7.4 5.6c.3 1 2.4 1 4.6.8M12 6.4c1.2-3.4 5.4-3.6 4.6-.8-.3 1-2.4 1-4.6.8"/></svg>
+        </div>
+        <div class="w-body">
+          <div class="w-label" id="label"><span class="w-label-text" id="labelText">GIFT GALLERY</span></div>
+          <div class="w-value" id="value"><span class="num" id="num">—</span><span class="of" id="of"></span></div>
+          <div class="w-sub" id="sub"></div>
+          <div class="w-bar" id="bar"><i id="fill"></i></div>
+        </div>
+        <div class="w-flash" aria-hidden="true"></div>
+        <i class="w-pop" id="pop" aria-hidden="true"></i>
+      </div>
     </div>
   </div>
+  <script src="/overlay/kit/kit.js"></script>
   <script src="/overlay/tiktok-stats/stats.js"></script>
 </body>
 </html>

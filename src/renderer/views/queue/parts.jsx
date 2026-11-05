@@ -141,16 +141,43 @@ const BACKDROPS = [
  * Live preview of an OBS browser source plus its URL. The iframe loads the very page OBS
  * loads, from the Steez server, so what you see is what the stream gets.
  */
-export function OverlayPreview({ path, width, height, onReset, title = 'Preview', stageHeight }) {
+export function OverlayPreview({ path, width, height, onReset, title = 'Preview', stageHeight, query = '', demoLabel, children }) {
   const base = useQU((s) => s.baseUrl);
   const [backdrop, setBackdrop] = useState('checker');
+  const [size, setSize] = useState(null);
+  const frame = useRef(null);
   const url = base ? base + path : '';
+
+  // The TikTok overlays report their real size in editor mode (?editor=1), so the OBS
+  // size shown below follows the preset, scale and width exactly.
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (!frame.current || e.source !== frame.current.contentWindow) return;
+      if (!e.data || e.data.type !== 'steez:size') return;
+      const { width: w, height: h } = e.data;
+      // The gifts card changes height a little as it rotates; keep the tallest for this width.
+      setSize((prev) => (prev && prev.width === w && prev.height >= h && prev.height - h < 60 ? prev : { width: w, height: h }));
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  /** Plays a fake update inside this preview only — OBS never sees it. */
+  const playDemo = () => frame.current?.contentWindow?.postMessage({ type: 'steez:demo' }, '*');
+  const obsW = size ? size.width : width;
+  const obsH = size ? size.height : height;
+
   return (
     <Panel
       title={title}
       className="qu-preview"
       actions={
         <>
+          {demoLabel && (
+            <Button size="sm" icon="play" onClick={playDemo} disabled={!url} title="Plays a fake update in this preview only">
+              {demoLabel}
+            </Button>
+          )}
           <Seg options={BACKDROPS} value={backdrop} onChange={setBackdrop} />
           {onReset && (
             <Button size="sm" variant="ghost" onClick={onReset}>
@@ -168,12 +195,13 @@ export function OverlayPreview({ path, width, height, onReset, title = 'Preview'
         <Button icon="external" className="icon" title="Open in browser" disabled={!url} onClick={() => window.steez.open(url)} />
       </div>
       <div className={`qu-stage bg-${backdrop}`} style={stageHeight ? { height: stageHeight } : undefined}>
-        {url && <iframe src={url} title={`${title} — overlay preview`} />}
+        {url && <iframe ref={frame} src={url + query} title={`${title} — overlay preview`} />}
       </div>
       <div className="help qu-obs">
-        In OBS: <b>Sources → + → Browser</b>, paste the URL, set width <b>{width}</b> and height <b>{height}</b>, and leave{' '}
+        In OBS: <b>Sources → + → Browser</b>, paste the URL, set width <b>{obsW}</b> and height <b>{obsH}</b>, and leave{' '}
         <i>Shutdown source when not visible</i> unchecked. Edits apply live — no refresh needed.
       </div>
+      {children}
     </Panel>
   );
 }

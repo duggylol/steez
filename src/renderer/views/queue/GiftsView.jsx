@@ -1,13 +1,15 @@
 // TikTok Gifts: watches the streamer's TikTok LIVE for gifts — top gifters by diamonds, the
-// biggest gift combo (and the one being tapped right now) — plus the OBS gifts overlay editor,
-// and two small badges for the daily gaming rank and Gift Gallery progress.
+// biggest gift combo (and the one being tapped right now) — the daily gaming rank and Gift
+// Gallery progress, and the style editor for all three OBS overlays (see WidgetStyle.jsx).
 import { useEffect, useState } from 'react';
-import { PageHeader, Panel, Button, Toggle, Tabs, Pill, Stat, Empty, Icon, toast } from '../../ui.jsx';
-import { useQU, startQU, editStyle, resetStyle, editSettings, fmtNum, editStats, resetStatsStyle, resetStats } from './store.js';
-import { Avatar, OverlayPreview, Ctl, SliderCtl, ColorCtl, SwitchCtl, TextCtl, SelectCtl, SegCtl, FONT_OPTIONS, useConfirm } from './parts.jsx';
+import { PageHeader, Panel, Button, Toggle, Tabs, Pill, Stat, Empty, Icon, Seg, toast } from '../../ui.jsx';
+import { useQU, startQU, editSettings, fmtNum, editStats, resetStats } from './store.js';
+import { Avatar, OverlayPreview, Ctl, SwitchCtl, useConfirm } from './parts.jsx';
+import { WidgetStyleEditor, WIDGETS } from './WidgetStyle.jsx';
 import './queue.css';
 
 let lastTab = 'session';
+let lastWidget = 'gifts';
 
 export default function GiftsView() {
   useEffect(startQU, []);
@@ -43,7 +45,7 @@ export default function GiftsView() {
       <Tabs
         tabs={[
           { id: 'session', label: 'Session' },
-          { id: 'overlay', label: 'Overlay' },
+          { id: 'overlay', label: 'Overlay styles' },
           { id: 'stats', label: 'Ranking & Gallery' },
         ]}
         value={tab}
@@ -52,7 +54,20 @@ export default function GiftsView() {
           setTab(t);
         }}
       />
-      {tab === 'session' ? <SessionTab /> : tab === 'overlay' ? <GiftsOverlayTab /> : <StatsTab confirm={confirm} />}
+      {tab === 'session' ? (
+        <SessionTab />
+      ) : tab === 'overlay' ? (
+        <StylesTab confirm={confirm} />
+      ) : (
+        <StatsTab
+          confirm={confirm}
+          onStyle={() => {
+            lastTab = 'overlay';
+            lastWidget = 'rank';
+            setTab('overlay');
+          }}
+        />
+      )}
       {dialog}
     </>
   );
@@ -228,64 +243,21 @@ function Leaderboard() {
 
 /* ═══════════════════════════════ Overlay ═══════════════════════════════ */
 
-function GiftsOverlayTab() {
-  const ov = useQU((s) => s.giftOverlay);
-  const path = useQU((s) => s.overlayPaths.gifts);
-  const set = (key) => (value) => editStyle('giftOverlay', { [key]: value });
-  if (!ov || !Object.keys(ov).length) return <div className="faint">Loading…</div>;
-
-  const scale = Number(ov.scale) || 1;
-  const obsW = Math.round(((Number(ov.width) || 420) + 24) * scale);
-  const obsH = Math.round(430 * scale + 24);
-
+/** One editor for all three TikTok overlays; the widget picker sits above it. */
+function StylesTab({ confirm }) {
+  const [widget, setWidget] = useState(lastWidget);
+  const pick = (w) => {
+    lastWidget = w;
+    setWidget(w);
+  };
   return (
-    <div className="qu-editor">
-      <div className="qu-controls">
-        <Panel title="Content">
-          <SegCtl
-            label="Show"
-            value={ov.mode}
-            options={[
-              { id: 'both', label: 'Both' },
-              { id: 'streak', label: 'Top streak' },
-              { id: 'gifter', label: 'Top gifter' },
-            ]}
-            onChange={set('mode')}
-          />
-          {ov.mode === 'both' && <SliderCtl label="Switch every" value={ov.rotateSeconds} min={3} max={30} unit="s" onChange={set('rotateSeconds')} />}
-          <TextCtl label="Streak title" value={ov.streakTitle} maxLength={20} onChange={set('streakTitle')} />
-          <TextCtl label="Gifter title" value={ov.gifterTitle} maxLength={20} onChange={set('gifterTitle')} />
-          <TextCtl label="Empty message" value={ov.emptyText} maxLength={40} onChange={set('emptyText')} />
-          <SwitchCtl label="Show title" value={ov.showTitle} onChange={set('showTitle')} />
-          <SwitchCtl label="Jump to live combos" value={ov.showLiveStreak} onChange={set('showLiveStreak')} />
-          <SwitchCtl label="Show gift name" value={ov.showGiftName} onChange={set('showGiftName')} />
-          <SwitchCtl label="Show diamonds" value={ov.showDiamonds} onChange={set('showDiamonds')} />
-          <SwitchCtl label="Gifter profile picture" value={ov.showAvatar} onChange={set('showAvatar')} />
-        </Panel>
-        <Panel title="Style">
-          <ColorCtl label="Gold / streak" value={ov.accent} onChange={set('accent')} />
-          <ColorCtl label="Secondary / gifter" value={ov.accent2} onChange={set('accent2')} />
-          <ColorCtl label="Text" value={ov.textColor} onChange={set('textColor')} />
-          <ColorCtl label="Card background" value={ov.bg} onChange={set('bg')} />
-          <SliderCtl label="Background opacity" value={ov.bgOpacity} min={0} max={1} step={0.02} onChange={set('bgOpacity')} />
-          <SliderCtl label="Corner radius" value={ov.radius} min={0} max={40} unit="px" onChange={set('radius')} />
-          <SliderCtl label="Width" value={ov.width} min={300} max={700} step={10} unit="px" onChange={set('width')} />
-          <SliderCtl label="Scale" value={ov.scale} min={0.6} max={2} step={0.05} unit="x" onChange={set('scale')} />
-          <SelectCtl label="Font" value={ov.fontFamily} options={FONT_OPTIONS.slice(0, 6)} onChange={set('fontFamily')} />
-        </Panel>
-        <Panel title="Effects">
-          <SwitchCtl label="Orbit ring" value={ov.ring} onChange={set('ring')} />
-          <SwitchCtl label="Floating sparkles" value={ov.particles} onChange={set('particles')} />
-          <SwitchCtl label="Glow" value={ov.glow} onChange={set('glow')} />
-        </Panel>
+    <>
+      <div className="qu-widget-pick">
+        <Seg options={WIDGETS.map((w) => ({ id: w.id, label: w.label }))} value={widget} onChange={pick} />
+        <span className="help">Each widget has its own preset and settings — use the same preset on all three to make them match.</span>
       </div>
-      <div className="qu-preview-col">
-        <OverlayPreview path={path} width={obsW} height={obsH} onReset={() => resetStyle('giftOverlay').then(() => toast('Gift overlay style reset'))} />
-        <div className="help">
-          Shows the top streak and the top gifter, switching between them, and jumps to a combo while it's being tapped. Use <b>Preview with demo gifts</b> to see it move.
-        </div>
-      </div>
-    </div>
+      <WidgetStyleEditor key={widget} widget={widget} confirm={confirm} />
+    </>
   );
 }
 
@@ -307,7 +279,7 @@ function fmtWhen(ts) {
 
 const fmtScore = (v) => (/^\d+$/.test(String(v)) ? fmtNum(v) : String(v));
 
-function StatsTab({ confirm }) {
+function StatsTab({ confirm, onStyle }) {
   const ts = useQU((s) => s.tiktokStats);
   const paths = useQU((s) => s.overlayPaths);
   if (!ts || !ts.display) return <div className="faint">Loading…</div>;
@@ -324,21 +296,29 @@ function StatsTab({ confirm }) {
     toast('Rank and gallery reset');
   };
 
-  // The badge is 244px wide plus 8px of padding each side, scaled from the top left.
-  const scale = Number(ts.style.scale) || 1;
-  const obsW = Math.round(244 * scale + 16);
-  const obsH = Math.round(94 * scale + 16);
+  // Each badge is its width plus 8px of padding each side, scaled from the top left.
+  const obsSize = (st) => {
+    const scale = Number(st?.scale) || 1;
+    return { width: Math.round((Number(st?.width) || 244) * scale + 16), height: Math.round(94 * scale + 16) };
+  };
 
   return (
     <div className="qu-editor">
       <div className="qu-controls">
         <RankPanel ts={ts} onReset={reset} />
         <GalleryPanel ts={ts} onReset={reset} />
-        <StatsStylePanel style={ts.style} />
+        <Panel title="Badge look">
+          <div className="row nowrap qu-stylelink">
+            <span className="help">Presets, colours, labels and animation for both badges live under Overlay styles.</span>
+            <Button size="sm" onClick={onStyle}>
+              Style the badges
+            </Button>
+          </div>
+        </Panel>
       </div>
       <div className="qu-preview-col">
-        <OverlayPreview title="Rank badge" path={paths.tiktokRank} width={obsW} height={obsH} stageHeight={150} />
-        <OverlayPreview title="Gallery badge" path={paths.tiktokGallery} width={obsW} height={obsH} stageHeight={150} />
+        <OverlayPreview title="Rank badge" path={paths.tiktokRank} {...obsSize(ts.style)} stageHeight={150} />
+        <OverlayPreview title="Gallery badge" path={paths.tiktokGallery} {...obsSize(ts.galleryStyle)} stageHeight={150} />
       </div>
     </div>
   );
@@ -474,33 +454,6 @@ function GalleryPanel({ ts, onReset }) {
         </>
       )}
       <div className="help">Gallery gifts light up when a viewer sends them. Manual mode is handy before TikTok has sent the gallery.</div>
-    </Panel>
-  );
-}
-
-function StatsStylePanel({ style }) {
-  const set = (key) => (value) => editStats('style', { [key]: value });
-  return (
-    <Panel
-      title="Badge style"
-      actions={
-        <Button size="sm" variant="ghost" onClick={() => resetStatsStyle().then(() => toast('Badge style reset'))}>
-          Reset style
-        </Button>
-      }
-    >
-      <SwitchCtl label="Show label" value={style.showLabel} onChange={set('showLabel')} />
-      <TextCtl label="Rank label" value={style.rankLabel} maxLength={24} onChange={set('rankLabel')} />
-      <TextCtl label="Gallery label" value={style.galleryLabel} maxLength={24} onChange={set('galleryLabel')} />
-      <TextCtl label="Not ranked text" value={style.unrankedText} maxLength={16} onChange={set('unrankedText')} />
-      <SwitchCtl label="Show rank score" value={style.showScore} onChange={set('showScore')} />
-      <SwitchCtl label="Gallery progress bar" value={style.showBar} onChange={set('showBar')} />
-      <ColorCtl label="Accent" value={style.accent} onChange={set('accent')} />
-      <ColorCtl label="Text" value={style.textColor} onChange={set('textColor')} />
-      <ColorCtl label="Background" value={style.bg} onChange={set('bg')} />
-      <SliderCtl label="Background opacity" value={style.bgOpacity} min={0} max={1} step={0.02} onChange={set('bgOpacity')} />
-      <SliderCtl label="Scale" value={style.scale} min={0.6} max={2.5} step={0.05} unit="x" onChange={set('scale')} />
-      <div className="help">Applies to both badges. OBS size at 1x: 260 × 110.</div>
     </Panel>
   );
 }

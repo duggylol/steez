@@ -13,6 +13,7 @@ const { TikTokLive } = require('./tiktok.cjs');
 const { createAvatarService } = require('./avatars.cjs');
 const { createTiktokStats, createSampleLogger } = require('./tiktokStats.cjs');
 const { mountOverlays } = require('./server.cjs');
+const widgetStyles = require('./widgetStyles.cjs');
 
 const STATE_FILE = 'queueup-state.json';
 const AVATARS_FILE = 'queueup-avatars.json';
@@ -314,6 +315,7 @@ async function init(ctx) {
       twitch,
       overlayClients: overlays.clientCount,
       overlayPaths: OVERLAY_PATHS,
+      widgetKit: widgetStyles.kitInfo(),
       baseUrl: ctx.server.port ? ctx.server.url('') : '',
     };
   }
@@ -415,6 +417,42 @@ async function init(ctx) {
     stats.resetStyle();
     return stats.snapshot();
   });
+  // One style API for all three TikTok widgets: 'gifts', 'rank' and 'gallery'.
+  // Each returns the widget's new style; the overlays are pushed the change live.
+  function widgetStyle(widget) {
+    if (widget === 'gifts') return store.data.giftOverlay;
+    const snap = stats.snapshot();
+    return widget === 'gallery' ? snap.galleryStyle : snap.style;
+  }
+  function editWidget(widget, fn) {
+    if (!widgetStyles.isWidget(widget)) return null;
+    if (widget === 'gifts') {
+      fn.gifts();
+      overlays.pushGifts('overlay');
+    } else {
+      fn.stats(widget);
+    }
+    return widgetStyle(widget);
+  }
+  handle('qu:widgetStyle:update', ({ widget, patch } = {}) =>
+    editWidget(widget, { gifts: () => store.updateGiftOverlay(patch || {}), stats: (w) => stats.setStyle(patch || {}, w) }),
+  );
+  handle('qu:widgetStyle:preset', ({ widget, preset } = {}) =>
+    editWidget(widget, { gifts: () => store.applyGiftPreset(preset), stats: (w) => stats.applyPreset(w, preset) }),
+  );
+  handle('qu:widgetStyle:reset', ({ widget } = {}) =>
+    editWidget(widget, { gifts: () => store.resetGiftOverlay(), stats: (w) => stats.resetStyle(w) }),
+  );
+  /** Puts all three widgets on one preset so they match. */
+  handle('qu:widgetStyle:matchAll', ({ preset } = {}) => {
+    if (!widgetStyles.isPreset(preset)) return null;
+    const out = {};
+    for (const w of widgetStyles.WIDGETS) {
+      out[w] = editWidget(w, { gifts: () => store.applyGiftPreset(preset), stats: (x) => stats.applyPreset(x, preset) });
+    }
+    return out;
+  });
+
   handle('qu:tiktokStats:reset', () => {
     stats.reset();
     return stats.snapshot();

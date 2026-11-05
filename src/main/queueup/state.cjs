@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const widgetStyles = require('./widgetStyles.cjs');
 
 // Twitch connection details (channel, tokens, bot account) are not here any more:
 // Steez owns the one shared Twitch connection.
@@ -53,30 +54,10 @@ const DEFAULT_OVERLAY = {
   emptyText: 'Queue is empty - type !join',
 };
 
-const DEFAULT_GIFT_OVERLAY = {
-  mode: 'both', // streak | gifter | both (alternates)
-  rotateSeconds: 8,
-  streakTitle: 'TOP STREAK',
-  gifterTitle: 'TOP GIFTER',
-  showTitle: true,
-  showLiveStreak: true, // jump to a combo while it is being tapped
-  showDiamonds: true,
-  showGiftName: true,
-  showAvatar: true,
-  accent: '#ffb547',
-  accent2: '#a970ff',
-  textColor: '#ffffff',
-  bg: '#0b0d14',
-  bgOpacity: 0, // 0 = fully transparent card
-  ring: true,
-  particles: true,
-  glow: true,
-  fontFamily: 'Inter',
-  scale: 1,
-  width: 420,
-  radius: 22,
-  emptyText: 'No gifts yet',
-};
+// The gifts card's look comes from the shared widget style system (widgetStyles.cjs): the
+// QueueUp Classic preset plus content toggles. Styles saved before presets existed are
+// mapped onto Classic with every customised value kept (see normalizeStyle).
+const DEFAULT_GIFT_OVERLAY = widgetStyles.defaultStyle('gifts');
 
 function makeId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -117,7 +98,7 @@ function importLegacyState(raw) {
     queue: Array.isArray(src.queue) ? src.queue : [],
     settings: { ...DEFAULT_SETTINGS, ...stripLegacySettings(src.settings) },
     overlay: { ...DEFAULT_OVERLAY, ...(src.overlay || {}) },
-    giftOverlay: { ...DEFAULT_GIFT_OVERLAY, ...(src.giftOverlay || {}) },
+    giftOverlay: widgetStyles.normalizeStyle('gifts', src.giftOverlay, 'classic'),
     gifts: src.gifts && typeof src.gifts === 'object' ? src.gifts : null,
   };
 }
@@ -155,7 +136,7 @@ class Store extends EventEmitter {
         this.data.queue = Array.isArray(raw.queue) ? raw.queue.map(normalizeEntry) : [];
         this.data.settings = { ...DEFAULT_SETTINGS, ...stripLegacySettings(raw.settings) };
         this.data.overlay = { ...DEFAULT_OVERLAY, ...(raw.overlay || {}) };
-        this.data.giftOverlay = { ...DEFAULT_GIFT_OVERLAY, ...(raw.giftOverlay || {}) };
+        this.data.giftOverlay = widgetStyles.normalizeStyle('gifts', raw.giftOverlay, 'classic');
         this.data.gifts = raw.gifts && typeof raw.gifts === 'object' ? raw.gifts : null;
         this.data.tiktokStats = raw.tiktokStats && typeof raw.tiktokStats === 'object' ? raw.tiktokStats : null;
       }
@@ -385,13 +366,20 @@ class Store extends EventEmitter {
   }
 
   updateGiftOverlay(patch) {
-    this.data.giftOverlay = { ...this.data.giftOverlay, ...patch };
+    this.data.giftOverlay = widgetStyles.applyPatch('gifts', this.data.giftOverlay, patch);
     this.changed('giftOverlay');
     return this.data.giftOverlay;
   }
 
   resetGiftOverlay() {
-    this.data.giftOverlay = { ...DEFAULT_GIFT_OVERLAY };
+    this.data.giftOverlay = widgetStyles.defaultStyle('gifts');
+    this.changed('giftOverlay');
+    return this.data.giftOverlay;
+  }
+
+  /** Switches the gifts card to a preset's look (no id: back to its current preset's look). */
+  applyGiftPreset(id) {
+    this.data.giftOverlay = widgetStyles.applyPreset('gifts', this.data.giftOverlay, id);
     this.changed('giftOverlay');
     return this.data.giftOverlay;
   }

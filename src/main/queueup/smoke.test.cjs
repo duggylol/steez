@@ -72,6 +72,7 @@ const { Store, formatQueueMessage, DEFAULT_SETTINGS } = require('./state.cjs');
 const { createGiftTracker } = require('./gifts.cjs');
 const ts = require('./tiktokStats.cjs');
 const queueup = require('./index.cjs');
+const widgetStyles = require('./widgetStyles.cjs');
 
 const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `steez-queueup-${name}-`));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -410,6 +411,146 @@ test('rank samples: first five per event per session, truncated, buffers summari
 });
 
 /* ------------------------------------------------------------------ */
+/* widget styles: presets, customising, migration                      */
+/* ------------------------------------------------------------------ */
+
+test('widget presets: steez, classic and at least four more, each valid for all three widgets', () => {
+  const ids = widgetStyles.PRESETS.map((p) => p.id);
+  assert.ok(ids.includes('steez') && ids.includes('classic'));
+  assert.ok(ids.length >= 6, 'at least four new presets');
+  assert.equal(new Set(ids).size, ids.length, 'preset ids are unique');
+  for (const w of widgetStyles.WIDGETS) {
+    for (const id of ids) {
+      const look = widgetStyles.presetLook(id, w);
+      assert.deepEqual(Object.keys(look).sort(), [...widgetStyles.LOOK_KEYS].sort(), `${id}/${w} sets every look key`);
+      assert.deepEqual(widgetStyles.sanitize(w, look), look, `${id}/${w} passes its own validation`);
+    }
+    const d = widgetStyles.defaultStyle(w);
+    assert.equal(d.preset, w === 'gifts' ? 'classic' : 'steez');
+    assert.equal(d.animations, true);
+  }
+  // The badges' Steez Clean is exactly the look they had before presets.
+  const steez = widgetStyles.presetLook('steez', 'rank');
+  assert.deepEqual([steez.accent, steez.textColor, steez.bg, steez.bgOpacity], ['#d4d4d4', '#f2f2f2', '#121212', 0.82]);
+  // Classic gifts is the original QueueUp card: transparent, gold + purple, ring, sparkles, glow.
+  const classic = widgetStyles.presetLook('classic', 'gifts');
+  assert.deepEqual(
+    [classic.accent, classic.accent2, classic.bgOpacity, classic.radius, classic.ring, classic.particles, classic.glow],
+    ['#ffb547', '#a970ff', 0, 22, true, true, true],
+  );
+  // Every preset has its own animation personality.
+  const personalities = new Set(widgetStyles.PRESETS.map((p) => [p.look.entrance, p.look.change, p.look.idle].join('/')));
+  assert.equal(personalities.size, ids.length);
+
+  const kit = widgetStyles.kitInfo();
+  assert.equal(kit.presets.length, ids.length);
+  assert.ok(kit.options.entrances.length && kit.options.changes.length && kit.options.idles.length && kit.options.fonts.length);
+  assert.equal(kit.presets.find((p) => p.id === 'neon').looks.gallery.entrance, 'flicker');
+});
+
+test('widget styles: validation, preset switch keeps prefs and content, reset to preset', () => {
+  const clean = widgetStyles.sanitize('rank', {
+    accent: '#ABC',
+    textColor: 'red',
+    bgOpacity: 7,
+    radius: -4,
+    fontFamily: '"Comic Sans MS"; } body {',
+    fontWeight: '650',
+    entrance: 'explode',
+    idle: 'float',
+    speed: '2',
+    animations: 'false',
+    rankLabel: 'x'.repeat(80),
+    mode: 'streak',
+    bogus: 1,
+  });
+  assert.equal(clean.accent, '#aabbcc');
+  assert.equal(clean.textColor, undefined, 'not a colour');
+  assert.equal(clean.bgOpacity, 1);
+  assert.equal(clean.radius, 0);
+  assert.equal(clean.fontFamily, 'Comic Sans MS  body', 'no quotes, braces or semicolons reach CSS');
+  assert.equal(clean.fontWeight, undefined, 'only real weights');
+  assert.equal(clean.entrance, undefined);
+  assert.equal(clean.idle, 'float');
+  assert.equal(clean.speed, 2);
+  assert.equal(clean.animations, false);
+  assert.equal(clean.rankLabel.length, 32);
+  assert.equal(clean.mode, undefined, 'gifts-only keys are dropped from a badge');
+  assert.equal(clean.bogus, undefined);
+
+  let st = widgetStyles.defaultStyle('gifts');
+  st = widgetStyles.applyPatch('gifts', st, { accent: '#123456', scale: 1.5, width: 500, streakTitle: 'BIG COMBO', speed: 0.5 });
+  assert.deepEqual(widgetStyles.modifiedKeys('gifts', st), ['accent']);
+  st = widgetStyles.applyPatch('gifts', st, { preset: 'neon' });
+  assert.equal(st.preset, 'neon');
+  assert.equal(st.accent, widgetStyles.presetLook('neon', 'gifts').accent, 'picking a preset fills its look');
+  assert.deepEqual([st.scale, st.width, st.streakTitle, st.speed], [1.5, 500, 'BIG COMBO', 0.5], 'prefs and content survive');
+  assert.deepEqual(widgetStyles.modifiedKeys('gifts', st), []);
+  // A preset and a tweak in one patch: the tweak lands on top.
+  st = widgetStyles.applyPatch('gifts', st, { preset: 'arcade', radius: 12 });
+  assert.deepEqual([st.preset, st.radius, st.change], ['arcade', 12, 'coin']);
+  st = widgetStyles.applyPatch('gifts', st, { idle: 'none', glow: true });
+  assert.deepEqual(widgetStyles.modifiedKeys('gifts', st).sort(), ['glow', 'idle', 'radius']);
+  st = widgetStyles.applyPreset('gifts', st);
+  assert.deepEqual(widgetStyles.modifiedKeys('gifts', st), [], 'reset to preset');
+  assert.equal(st.preset, 'arcade');
+  assert.equal(st.streakTitle, 'BIG COMBO');
+  assert.equal(widgetStyles.applyPatch('gifts', st, { preset: 'nope' }).preset, 'arcade', 'unknown presets are ignored');
+});
+
+test('widget styles: saved settings from before presets keep their look', () => {
+  // A gifts overlay customised in QueueUp / older Steez: no preset key.
+  const legacyGift = { mode: 'streak', accent: '#ff0000', ring: false, bgOpacity: 0.4, radius: 8, fontFamily: 'Impact', scale: 1.2, width: 380, emptyText: 'Send a gift!' };
+  const g = widgetStyles.normalizeStyle('gifts', legacyGift, 'classic');
+  assert.equal(g.preset, 'classic', 'mapped onto QueueUp Classic');
+  for (const [k, v] of Object.entries(legacyGift)) assert.equal(g[k], v, `${k} kept`);
+  assert.equal(g.accent2, '#a970ff', 'everything else from Classic');
+  assert.equal(g.particles, true);
+  assert.deepEqual(widgetStyles.modifiedKeys('gifts', g).sort(), ['accent', 'bgOpacity', 'fontFamily', 'radius', 'ring']);
+  assert.equal(widgetStyles.applyPreset('gifts', g).accent, '#ffb547', 'reset to preset gives the Classic gold back');
+
+  // The Store maps an old state file the same way.
+  const dir = tmp('legacy-style');
+  const file = path.join(dir, 'q.json');
+  fs.writeFileSync(file, JSON.stringify({ party: [], queue: [], giftOverlay: legacyGift }));
+  const store = new Store(file);
+  assert.equal(store.data.giftOverlay.preset, 'classic');
+  assert.equal(store.data.giftOverlay.accent, '#ff0000');
+  assert.equal(store.data.giftOverlay.entrance, 'rise');
+  store.updateGiftOverlay({ preset: 'glass' });
+  assert.equal(store.data.giftOverlay.accent, '#ffffff');
+  assert.equal(store.data.giftOverlay.width, 380, 'width survives a preset switch');
+  store.updateGiftOverlay({ accent: '#00ff00' });
+  store.applyGiftPreset();
+  assert.equal(store.data.giftOverlay.accent, '#ffffff', 'reset to the current preset');
+  store.flush();
+
+  // Rank/gallery badges: one old shared style seeds both badges on Steez Clean.
+  const s = ts.createTiktokStats();
+  s.load({ style: { accent: '#abcdef', bgOpacity: 0.5, rankLabel: 'DAILY', galleryLabel: 'GALLERY', showBar: false, unrankedText: 'Not yet' } });
+  const snap = s.snapshot();
+  assert.deepEqual([snap.style.preset, snap.style.accent, snap.style.bgOpacity, snap.style.rankLabel], ['steez', '#abcdef', 0.5, 'DAILY']);
+  assert.deepEqual([snap.galleryStyle.preset, snap.galleryStyle.accent, snap.galleryStyle.galleryLabel, snap.galleryStyle.showBar], ['steez', '#abcdef', 'GALLERY', false]);
+  assert.equal(snap.display.rank.text, '—');
+  assert.equal(snap.style.galleryLabel, undefined, 'each badge keeps only its own keys');
+
+  // Per badge from here on; a widget-less edit still reaches both (the old behaviour).
+  s.applyPreset('gallery', 'holo');
+  s.setStyle({ accent: '#111111' }, 'rank');
+  let now = s.snapshot();
+  assert.deepEqual([now.style.preset, now.style.accent, now.galleryStyle.preset], ['steez', '#111111', 'holo']);
+  s.setStyle({ textColor: '#eeeeee', galleryLabel: 'G' });
+  now = s.snapshot();
+  assert.deepEqual([now.style.textColor, now.galleryStyle.textColor, now.galleryStyle.galleryLabel], ['#eeeeee', '#eeeeee', 'G']);
+  s.resetStyle('gallery');
+  assert.equal(s.snapshot().galleryStyle.preset, 'steez');
+  assert.equal(s.snapshot().style.accent, '#111111', 'resetting one badge leaves the other');
+  const restored = ts.createTiktokStats();
+  restored.load(JSON.parse(JSON.stringify(s.serialize())));
+  assert.equal(restored.snapshot().style.accent, '#111111', 'per-badge styles persist');
+});
+
+/* ------------------------------------------------------------------ */
 /* module: import, IPC, chat, avatars, tiktok, overlays                */
 /* ------------------------------------------------------------------ */
 
@@ -708,6 +849,69 @@ test('module: IPC, chat commands, avatars, tiktok and overlays', async (t) => {
     st = await m.call('qu:getState');
     assert.equal(st.tiktokStats.display.rank.text, '—');
     await m.call('qu:tiktok:disconnect');
+  });
+
+  await t.test('widget styles: presets over IPC, live pushes, kit files', async () => {
+    for (const c of ['qu:widgetStyle:update', 'qu:widgetStyle:preset', 'qu:widgetStyle:reset', 'qu:widgetStyle:matchAll']) assert.ok(m.handlers.has(c), c);
+    const st0 = await m.call('qu:getState');
+    assert.ok(st0.widgetKit && st0.widgetKit.presets.length >= 6, 'the editor gets the preset table');
+
+    const ws = new WebSocket(`ws://127.0.0.1:${m.port}/queueup-ws`);
+    const msgs = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(String(d))));
+    await new Promise((r) => ws.once('open', r));
+    await wait(50);
+    msgs.length = 0;
+
+    const neon = await m.call('qu:widgetStyle:preset', { widget: 'gifts', preset: 'neon' });
+    assert.equal(neon.preset, 'neon');
+    assert.equal(neon.entrance, 'flicker');
+    const tweaked = await m.call('qu:widgetStyle:update', { widget: 'gifts', patch: { accent: '#00ff00', streakTitle: 'COMBO' } });
+    assert.deepEqual([tweaked.accent, tweaked.streakTitle], ['#00ff00', 'COMBO']);
+    const back = await m.call('qu:widgetStyle:preset', { widget: 'gifts' });
+    assert.equal(back.accent, '#ff3df2', 'reset to preset');
+    assert.equal(back.streakTitle, 'COMBO');
+    const rank = await m.call('qu:widgetStyle:preset', { widget: 'rank', preset: 'esports' });
+    assert.equal(rank.preset, 'esports');
+    const gal = await m.call('qu:widgetStyle:update', { widget: 'gallery', patch: { preset: 'glass', showTotal: false } });
+    assert.deepEqual([gal.preset, gal.showTotal], ['glass', false]);
+    assert.equal(await m.call('qu:widgetStyle:update', { widget: 'nope', patch: {} }), null);
+    await wait(50);
+    assert.ok(msgs.some((x) => x.type === 'gifts' && x.giftOverlay.preset === 'neon'), 'gifts style pushes live');
+    assert.ok(
+      msgs.some((x) => x.type === 'tiktokStats' && x.tiktokStats.style.preset === 'esports' && x.tiktokStats.galleryStyle.preset === 'glass'),
+      'badge styles push live',
+    );
+    assert.equal((await m.call('qu:getState')).tiktokStats.display.gallery.showTotal, false);
+
+    const all = await m.call('qu:widgetStyle:matchAll', { preset: 'holo' });
+    assert.deepEqual([all.gifts.preset, all.rank.preset, all.gallery.preset], ['holo', 'holo', 'holo']);
+    assert.equal(all.gallery.showTotal, false, 'matching keeps content');
+    const reset = await m.call('qu:widgetStyle:reset', { widget: 'gallery' });
+    assert.deepEqual([reset.preset, reset.showTotal], ['steez', true]);
+    ws.close();
+
+    // Overlay pages load the kit; the kit and the preset table are served.
+    for (const p of ['/overlay/gifts/', '/overlay/tiktok-rank', '/overlay/tiktok-gallery']) {
+      const page = await get(m.port, p);
+      assert.match(page.body, /\/overlay\/kit\/kit\.js/, p);
+      assert.match(page.body, /\/overlay\/kit\/themes\.css/, p);
+    }
+    for (const f of ['kit.js', 'kit.css', 'themes.css']) assert.equal((await get(m.port, '/overlay/kit/' + f)).status, 200, f);
+    const presets = JSON.parse((await get(m.port, '/overlay/kit/presets.json')).body);
+    assert.deepEqual(
+      presets.presets.map((p) => p.id),
+      widgetStyles.PRESETS.map((p) => p.id),
+    );
+    // Every preset has its theme in the stylesheet.
+    const themes = (await get(m.port, '/overlay/kit/themes.css')).body;
+    for (const id of presets.presets.map((p) => p.id)) assert.ok(themes.includes(`[data-theme="${id}"]`), `theme css for ${id}`);
+
+    await wait(350);
+    const disk = JSON.parse(fs.readFileSync(path.join(userData, 'queueup-state.json'), 'utf8'));
+    assert.equal(disk.giftOverlay.preset, 'holo', 'persisted with the QueueUp state');
+    assert.equal(disk.tiktokStats.style.preset, 'holo');
+    assert.equal(disk.tiktokStats.galleryStyle.preset, 'steez');
   });
 
   await t.test('gifts reset and demo session', async () => {

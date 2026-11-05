@@ -8,10 +8,13 @@
 //   /overlay/tiktok-rank      daily gaming rank badge   (page + /api/state)
 //   /overlay/tiktok-gallery   Gift Gallery badge         (page + /api/state)
 //   /overlay/tiktok-stats/*   their shared script and stylesheet
+//   /overlay/kit/*            style kit shared by the three TikTok overlays (themes, motion)
+//   /overlay/kit/presets.json the preset table, for the editor's preset thumbnails
 //   /queueup-ws               live pushes to both overlays and the in-app previews
 const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
+const { kitInfo } = require('./widgetStyles.cjs');
 
 const OVERLAY_DIR = path.join(__dirname, 'overlay');
 const WS_PATH = '/queueup-ws';
@@ -61,6 +64,8 @@ function mountOverlays({ router, addUpgrade, store, getGifts, getStats, onLog })
   // Both badges are one script + stylesheet; the page only says which one it is.
   router.get('/overlay/tiktok-rank', (_req, res) => res.sendFile(path.join(OVERLAY_DIR, 'tiktok-stats', 'rank.html')));
   router.get('/overlay/tiktok-gallery', (_req, res) => res.sendFile(path.join(OVERLAY_DIR, 'tiktok-stats', 'gallery.html')));
+  router.get('/overlay/kit/presets.json', (_req, res) => res.json(kitInfo()));
+  router.use('/overlay/kit', express.static(path.join(OVERLAY_DIR, 'kit'), { index: false }));
   router.use('/overlay/tiktok-stats', express.static(path.join(OVERLAY_DIR, 'tiktok-stats'), { index: false }));
   router.use('/overlay/queue', express.static(path.join(OVERLAY_DIR, 'queue'), { index: 'index.html' }));
   router.use('/overlay/gifts', express.static(path.join(OVERLAY_DIR, 'gifts'), { index: 'index.html' }));

@@ -3,34 +3,44 @@
 <head>
 <meta charset="utf-8" />
 <title>Steez TikTok Gifts</title>
+<link rel="stylesheet" href="/overlay/kit/kit.css" />
 <link rel="stylesheet" href="/overlay/gifts/gifts.css" />
+<link rel="stylesheet" href="/overlay/kit/themes.css" />
 </head>
-<body class="ring particles glow">
+<body class="k-gifts fx-ring fx-particles fx-glow has-icon" data-theme="classic" data-entrance="rise" data-change="punch" data-idle="float">
   <div class="stage" id="stage">
-    <div class="card" id="card">
-      <div class="sparkles" id="sparkles" aria-hidden="true"></div>
+    <div class="w-motion">
+      <div class="w card" id="card">
+        <div class="w-glow" aria-hidden="true"></div>
+        <div class="w-fx" aria-hidden="true"><div class="sparkles" id="sparkles"></div><i class="w-sweep"></i><i class="w-stripes"></i></div>
 
-      <div class="panel" id="panel">
-        <div class="title" id="title">
-          <span class="star">✦</span><span class="title-text" id="titleText">TOP STREAK</span><span class="star">✦</span>
-        </div>
+        <div class="panel" id="panel">
+          <div class="w-label title" id="title">
+            <span class="star">✦</span><span class="w-label-text title-text" id="titleText">TOP STREAK</span><span class="star">✦</span>
+          </div>
 
-        <div class="medallion" id="medallion">
-          <div class="orbit"><i></i><i></i><i></i><i></i></div>
-          <div class="coin" id="coin">
-            <div class="coin-face" id="coinFace"></div>
-            <div class="coin-badge" id="coinBadge">★</div>
+          <div class="w-hero medallion" id="medallion">
+            <div class="orbit"><i></i><i></i><i></i><i></i></div>
+            <div class="coin" id="coin">
+              <div class="coin-face" id="coinFace"></div>
+              <div class="coin-badge" id="coinBadge">★</div>
+            </div>
+          </div>
+
+          <div class="w-text">
+            <div class="w-name name" id="name">—</div>
+            <div class="w-value stat" id="stat"><span class="stat-dot"></span><span class="num stat-value" id="statValue">x0</span><span class="stat-label" id="statLabel">Streak</span></div>
+            <div class="w-sub sub" id="sub"></div>
           </div>
         </div>
 
-        <div class="name" id="name">—</div>
-        <div class="stat" id="stat"><span class="stat-dot"></span><span class="stat-value" id="statValue">x0</span><span class="stat-label" id="statLabel">Streak</span></div>
-        <div class="sub" id="sub"></div>
+        <div class="empty" id="empty"><span class="pulse"></span><span id="emptyText">No gifts yet</span></div>
+        <div class="w-flash" aria-hidden="true"></div>
+        <i class="w-pop" id="pop" aria-hidden="true"></i>
       </div>
-
-      <div class="empty" id="empty"><span class="pulse"></span><span id="emptyText">No gifts yet</span></div>
     </div>
   </div>
+  <script src="/overlay/kit/kit.js"></script>
   <script src="/overlay/gifts/gifts.js"></script>
 </body>
 </html>

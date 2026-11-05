@@ -357,11 +357,19 @@ if (!app.requestSingleInstanceLock()) {
     fs.mkdirSync(dir, { recursive: true });
     const routes = (process.env.STEEZ_SNAPSHOT_ROUTES || 'home,music,queue,gifts,commands,moderation,loyalty,games,overlays,settings').split(',');
     win.setSize(1400, 880);
-    for (const r of routes) {
+    for (const spec of routes) {
+      // "page@Tab label" opens a page, then clicks the tab/button with that label.
+      const [r, click] = spec.split('@');
       await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(r)}`);
       await sleep(1500);
+      if (click) {
+        await win.webContents.executeJavaScript(
+          `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(click)})?.click()`,
+        );
+        await sleep(2500);
+      }
       const img = await win.webContents.capturePage();
-      fs.writeFileSync(path.join(dir, `${r}.png`), img.toPNG());
+      fs.writeFileSync(path.join(dir, `${spec.replace(/[^\w-]+/g, '_')}.png`), img.toPNG());
     }
     app.quit();
   }

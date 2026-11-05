@@ -125,3 +125,32 @@
 .qu-stepper { gap: 6px; }
 .qu-stepper b { min-width: 40px; text-align: center; font-family: var(--mono); font-weight: 400; font-variant-numeric: tabular-nums; }
 .qu-ctl-c > input[type=number] { width: 90px; }
+
+/* ─── TikTok widget styles (WidgetStyle.jsx) ─── */
+.qu-widget-pick { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.qu-widget-pick .help { margin-top: 0; }
+/* Eight presets: one row of eight when there is room, else two rows of four (or four of two). */
+.qu-presets-wrap { container-type: inline-size; }
+.qu-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@container (min-width: 640px) { .qu-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (min-width: 1290px) { .qu-presets { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+.qu-preset {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0;
+  padding: 0; text-align: left; white-space: normal; background: var(--surface-2); border: 1px solid var(--line);
+}
+.qu-preset:hover { background: var(--surface-3); border-color: var(--line-2); }
+.qu-preset.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.qu-preset-thumb {
+  position: relative; display: flex; align-items: center; justify-content: center; height: 158px; overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: #1a1a1a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Crect width='6' height='6' fill='%23222222'/%3E%3Crect x='6' y='6' width='6' height='6' fill='%23222222'/%3E%3C/svg%3E");
+}
+.qu-preset-frame { flex: none; overflow: hidden; position: relative; }
+.qu-preset-thumb iframe { border: 0; display: block; transform-origin: 0 0; pointer-events: none; background: transparent; color-scheme: normal; }
+.qu-preset-meta { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px 9px; min-width: 0; }
+.qu-preset-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qu-preset-on { position: absolute; top: 6px; left: 6px; z-index: 1; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); padding: 0 5px; }
+.qu-preset-tag { color: var(--text-3); font-size: 11px; line-height: 1.35; }
+.qu-dim { opacity: .45; }
+.qu-stylelink { justify-content: space-between; gap: 12px; }
+.qu-stylelink .help { margin-top: 0; }

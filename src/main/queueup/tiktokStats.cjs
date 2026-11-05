@@ -9,6 +9,7 @@
 // numbers or as their names, numbers as strings, and anything missing is simply ignored.
 // Pure Node — no Electron — so it can be unit-tested.
 const fs = require('fs');
+const widgetStyles = require('./widgetStyles.cjs');
 
 /** ProfitRankType from tiktok-live-proto v3. */
 const RANK_TYPES = {
@@ -45,19 +46,11 @@ const NOTIFY_TYPES = {
   MSG_TYPE_UN_KNOW: 255,
 };
 
-const DEFAULT_STATS_STYLE = {
-  rankLabel: 'GAMING · DAILY',
-  galleryLabel: 'GIFT GALLERY',
-  showLabel: true,
-  showScore: true,
-  showBar: true,
-  unrankedText: 'Unranked',
-  accent: '#d4d4d4',
-  textColor: '#f2f2f2',
-  bg: '#121212',
-  bgOpacity: 0.82,
-  scale: 1,
-};
+// Each badge has its own style from the shared widget style system (widgetStyles.cjs):
+// `style` is the rank badge (the name predates the gallery having its own), `galleryStyle`
+// the Gift Gallery badge. Both start on the Steez Clean preset.
+const DEFAULT_STATS_STYLE = widgetStyles.defaultStyle('rank');
+const DEFAULT_GALLERY_STYLE = widgetStyles.defaultStyle('gallery');
 
 const DEFAULT_MANUAL = {
   rankEnabled: false,
@@ -239,6 +232,7 @@ function cleanManual(cur, patch) {
 function resolveDisplay(st) {
   const manual = st.manual || DEFAULT_MANUAL;
   const style = st.style || DEFAULT_STATS_STYLE;
+  const galleryStyle = st.galleryStyle || DEFAULT_GALLERY_STYLE;
   const unranked = style.unrankedText || 'Unranked';
 
   let rank;
@@ -262,6 +256,7 @@ function resolveDisplay(st) {
     gallery = { source: n ? 'gifts' : 'none', collected: n, total: 0 };
   }
   gallery.text = gallery.total > 0 ? `${gallery.collected}/${gallery.total}` : gallery.source === 'none' ? '—' : String(gallery.collected);
+  gallery.showTotal = galleryStyle.showTotal !== false;
   gallery.ratio = gallery.total > 0 ? Math.min(1, gallery.collected / gallery.total) : 0;
   return { rank, gallery };
 }
@@ -278,7 +273,14 @@ function createTiktokStats({ onChange, now = () => Date.now() } = {}) {
   let st = defaults();
 
   function defaults() {
-    return { rank: emptyRank(), gallery: emptyGallery(), galleryGiftIds: [], manual: { ...DEFAULT_MANUAL }, style: { ...DEFAULT_STATS_STYLE } };
+    return {
+      rank: emptyRank(),
+      gallery: emptyGallery(),
+      galleryGiftIds: [],
+      manual: { ...DEFAULT_MANUAL },
+      style: widgetStyles.defaultStyle('rank'),
+      galleryStyle: widgetStyles.defaultStyle('gallery'),
+    };
   }
   const changed = (reason) => onChange && onChange(reason);
 
@@ -289,7 +291,10 @@ function createTiktokStats({ onChange, now = () => Date.now() } = {}) {
     st.gallery = { ...st.gallery, ...(raw.gallery || {}) };
     st.galleryGiftIds = Array.isArray(raw.galleryGiftIds) ? raw.galleryGiftIds.map(String).slice(0, 500) : [];
     st.manual = cleanManual({ ...DEFAULT_MANUAL }, raw.manual || {});
-    st.style = { ...DEFAULT_STATS_STYLE, ...(raw.style || {}) };
+    // Before each badge had its own style, one shared `style` held both badges' look and
+    // labels: it seeds the gallery badge too, on the Steez Clean preset they were drawn with.
+    st.style = widgetStyles.normalizeStyle('rank', raw.style, 'steez');
+    st.galleryStyle = widgetStyles.normalizeStyle('gallery', raw.galleryStyle || raw.style, 'steez');
   }
 
   function serialize() {
@@ -346,18 +351,33 @@ function createTiktokStats({ onChange, now = () => Date.now() } = {}) {
     return st.manual;
   }
 
-  function setStyle(patch) {
-    const clean = {};
-    for (const [k, v] of Object.entries(patch || {})) if (k in DEFAULT_STATS_STYLE) clean[k] = v;
-    st.style = { ...st.style, ...clean };
+  const STYLE_KEY = { rank: 'style', gallery: 'galleryStyle' };
+
+  /**
+   * Edits one badge's style ('rank' or 'gallery'). With no widget the patch goes to both,
+   * each keeping only the keys it knows (the old shared-style behaviour).
+   */
+  function setStyle(patch, widget) {
+    for (const w of widget in STYLE_KEY ? [widget] : ['rank', 'gallery']) {
+      st[STYLE_KEY[w]] = widgetStyles.applyPatch(w, st[STYLE_KEY[w]], patch);
+    }
     changed('style');
-    return st.style;
+    return widget === 'gallery' ? st.galleryStyle : st.style;
   }
 
-  function resetStyle() {
-    st.style = { ...DEFAULT_STATS_STYLE };
+  /** Switches a badge to a preset's look (no id: back to its current preset's look). */
+  function applyPreset(widget, id) {
+    const w = widget === 'gallery' ? 'gallery' : 'rank';
+    st[STYLE_KEY[w]] = widgetStyles.applyPreset(w, st[STYLE_KEY[w]], id);
     changed('style');
-    return st.style;
+    return st[STYLE_KEY[w]];
+  }
+
+  /** Back to the defaults: one badge, or both when no widget is given. */
+  function resetStyle(widget) {
+    for (const w of widget in STYLE_KEY ? [widget] : ['rank', 'gallery']) st[STYLE_KEY[w]] = widgetStyles.defaultStyle(w);
+    changed('style');
+    return widget === 'gallery' ? st.galleryStyle : st.style;
   }
 
   /** Forgets what TikTok sent (rank, notice, gallery); manual values and style stay. */
@@ -368,7 +388,7 @@ function createTiktokStats({ onChange, now = () => Date.now() } = {}) {
     changed('reset');
   }
 
-  return { load, serialize, snapshot, handleRankUpdate, handleGameRankNotify, handleGiftPanel, handleGift, setManual, setStyle, resetStyle, reset };
+  return { load, serialize, snapshot, handleRankUpdate, handleGameRankNotify, handleGiftPanel, handleGift, setManual, setStyle, applyPreset, resetStyle, reset };
 }
 
 /* ------------------------------------------------------------------ */
@@ -421,6 +441,7 @@ module.exports = {
   RANK_TYPES,
   NOTIFY_TYPES,
   DEFAULT_STATS_STYLE,
+  DEFAULT_GALLERY_STYLE,
   DEFAULT_MANUAL,
   rankTypeNum,
   notifyTypeNum,
