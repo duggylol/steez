@@ -61,8 +61,8 @@ const HELP = {
   'moderation.bannedWords.regex': 'Advanced: one regular expression per line.',
   'moderation.spamBots.patterns': 'Regexes checked against first-time chatters — matches are banned.',
   'shield.followsPerMinute': 'Shield turns on automatically when follows per minute reach this number (follow-bot attack).',
-  'ai.model': 'Claude model ID. claude-opus-5-5 (default, smartest) — claude-haiku-5-5 is much cheaper for chat.',
-  'ai.effort': 'low / medium / high — lower is faster and cheaper. Leave empty for the model default.',
+  'ai.model': 'Haiku answers fastest and costs the least — great for busy chats. Opus gives the best answers. Fable is the most capable but costs the most.',
+  'ai.effort': 'How hard the model thinks before replying. Lower is faster and cheaper; Low suits chat replies.',
   'ai.respondToMentions': 'Reply when someone @mentions the bot account.',
   'ai.autoTranslate': 'Automatically translate messages written in non-Latin scripts (Cyrillic, CJK, Arabic, ...).',
   'ai.firstMessageSpamCheck': 'Ask the AI whether first-time chatter messages are spam and delete them.',
@@ -82,7 +82,20 @@ const TEMPLATES = {
 };
 const SELECTS = {
   'general.replyStyle': ['mention', 'reply'],
-  'ai.effort': ['', 'low', 'medium', 'high', 'xhigh', 'max'],
+  'ai.effort': [
+    { value: '', label: 'Model default' },
+    { value: 'low', label: 'Low — fastest, cheapest (good for chat)' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'xhigh', label: 'Extra high' },
+    { value: 'max', label: 'Max — slowest, most thorough' },
+  ],
+  'ai.model': [
+    { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 — fastest, cheapest' },
+    { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 — balanced' },
+    { value: 'claude-opus-5-5', label: 'Claude Opus 5.5 — smartest (default)' },
+    { value: 'claude-fable-5-1', label: 'Claude Fable 5.1 — most capable, most expensive' },
+  ],
   effect: ['', 'confetti', 'emoterain', 'tts', 'shake', 'spotlight'],
 };
 
@@ -127,7 +140,11 @@ function field(obj, key, path) {
     return h('label', { class: 'field' }, h('span', {}, label(key)), h('input', { type: 'number', step: 'any', value: v, oninput: (e) => (obj[key] = Number(e.target.value)) }), help);
   if (typeof v === 'string') {
     let input;
-    if (SELECTS[path]) input = h('select', { onchange: (e) => (obj[key] = e.target.value) }, SELECTS[path].map((o) => h('option', { value: o, selected: v === o }, o || '(default)')));
+    if (SELECTS[path]) {
+      const opts = SELECTS[path].map((o) => (typeof o === 'string' ? { value: o, label: o || '(default)' } : o));
+      if (!opts.some((o) => o.value === v)) opts.push({ value: v, label: v }); // keep a custom value visible
+      input = h('select', { onchange: (e) => (obj[key] = e.target.value) }, opts.map((o) => h('option', { value: o.value, selected: v === o.value }, o.label)));
+    }
     else if (/level$/i.test(key)) input = h('select', { onchange: (e) => (obj[key] = e.target.value) }, S.levels.map((l) => h('option', { value: l, selected: v === l }, l)));
     else if (/message|personality|response/i.test(key) || v.length > 70) input = h('textarea', { oninput: (e) => (obj[key] = e.target.value) }, v);
     else input = h('input', { value: v, oninput: (e) => (obj[key] = e.target.value) });
@@ -465,7 +482,24 @@ function modlogCard(on) {
 // AI
 function pageAI(main) {
   main.append(head('AI'));
-  if (!S.config.anthropic) main.append(card('Setup', h('p', {}, 'Add ', h('code', {}, 'ANTHROPIC_API_KEY=...'), ' to your .env file and restart to enable AI features. Get a key at ', h('a', { href: 'https://console.anthropic.com', target: '_blank' }, 'console.anthropic.com'), '.')));
+  const keyIn = h('input', { type: 'password', autocomplete: 'off', placeholder: S.config.anthropic ? '••••••••••••  (saved — paste a new key to replace it)' : 'Paste your key: sk-ant-…' });
+  const keyState = h('span', { class: S.config.anthropic ? 'pill good' : 'pill' }, S.config.anthropic ? 'Key saved — AI is on' : 'No key yet — AI is off');
+  const saveKey = async (value) => {
+    const r = await api.put('/api/secrets', { anthropicKey: value });
+    keyIn.value = '';
+    S.config.anthropic = r.anthropicKey;
+    keyState.className = r.anthropicKey ? 'pill good' : 'pill';
+    keyState.textContent = r.anthropicKey ? 'Key saved — AI is on' : 'No key yet — AI is off';
+    toast(r.anthropicKey ? 'API key saved' : 'API key removed');
+  };
+  keyIn.addEventListener('keydown', (e) => e.key === 'Enter' && keyIn.value.trim() && saveKey(keyIn.value.trim()));
+  main.append(
+    card('Anthropic API key',
+      h('div', { class: 'row' }, keyIn, btn('Save', () => keyIn.value.trim() && saveKey(keyIn.value.trim()), 'primary'), btn('Remove', () => confirm('Remove the saved API key?') && saveKey(''), 'danger')),
+      h('div', { class: 'row', style: 'margin-top:10px' }, keyState,
+        h('span', { class: 'help', style: 'margin:0' }, 'Get one at ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); window.steez.open('https://console.anthropic.com/settings/keys'); } }, 'console.anthropic.com'), '. Stored only on this PC; usage is billed to your Anthropic account.')),
+    ),
+  );
   const out = h('div', { class: 'mono', style: 'margin-top:10px;white-space:pre-wrap' });
   const prompt = h('input', { placeholder: 'Ask the bot something…' });
   main.append(
