@@ -1,0 +1,54 @@
+appId: gg.steez.app
+productName: Steez
+copyright: Copyright © 2026 duggylol
+
+# Auto-updates are pulled from this repo's GitHub Releases (electron-updater).
+publish:
+  provider: github
+  owner: duggylol
+  repo: steez
+  releaseType: release
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**
+  - src/main/**
+  - "!src/main/**/*.test.*"
+  # Keep the download small: no type definitions, source maps, docs or tests from dependencies.
+  - "!**/node_modules/**/*.{d.ts,d.mts,d.cts,map,md,markdown,ts.map}"
+  - "!**/node_modules/**/{test,tests,__tests__,docs,doc,example,examples,.github}/**"
+  - "!**/node_modules/**/{CHANGELOG*,README*,LICENSE.md}"
+  - build/icon.png
+  - package.json
+  - from: .
+    filter:
+      - app-config.json
+
+# yt-dlp (YouTube audio for song requests) ships next to the app, outside the asar.
+extraResources:
+  - from: resources/bin/win32-x64
+    to: bin/win32-x64
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+
+# Discord-style install: one click, per-user, no admin prompt, launches when done.
+# Updates install silently from the start-up screen.
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Steez
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  artifactName: Steez-Setup-${version}.${ext}
+
+npmRebuild: false
+compression: maximum

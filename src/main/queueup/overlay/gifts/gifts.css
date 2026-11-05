@@ -1,0 +1,286 @@
+/* ============================================================
+   Steez TikTok gifts overlay (OBS browser source)
+   Every colour and size below is a CSS variable pushed live from
+   the app, so styling changes apply without reloading the source.
+   ============================================================ */
+
+:root {
+  --accent: #ffb547;         /* gold: streak / coin */
+  --accent2: #a970ff;        /* secondary: orbit sparkles, gifter mode */
+  --text: #ffffff;
+  --bg: 11, 13, 20;          /* card background as r,g,b */
+  --bg-opacity: 0;
+  --radius: 22px;
+  --width: 420px;
+  --scale: 1;
+  --font: Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: transparent !important;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body { padding: 12px; }
+
+.stage {
+  width: var(--width);
+  transform: scale(var(--scale));
+  transform-origin: top left;
+}
+
+.card {
+  position: relative;
+  min-height: 300px;
+  padding: 26px 22px 30px;
+  border-radius: var(--radius);
+  background: rgba(var(--bg), var(--bg-opacity));
+  overflow: hidden;
+  text-align: center;
+  transition: background .3s ease;
+}
+body.has-bg .card {
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,.9);
+}
+
+/* ============================ floating sparkles ============================ */
+
+.sparkles { position: absolute; inset: 0; pointer-events: none; }
+.sparkles i {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 99px;
+  background: var(--accent2);
+  box-shadow: 0 0 8px var(--accent2);
+  opacity: 0;
+  animation: drift var(--dur, 6s) ease-in-out var(--delay, 0s) infinite;
+}
+.sparkles i:nth-child(odd) { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.sparkles i.big { width: 7px; height: 7px; }
+body:not(.particles) .sparkles { display: none; }
+
+@keyframes drift {
+  0%   { opacity: 0; transform: translateY(12px) scale(.6); }
+  25%  { opacity: 1; }
+  75%  { opacity: .7; }
+  100% { opacity: 0; transform: translateY(-38px) scale(1.1); }
+}
+
+/* ============================ title ============================ */
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 14px rgba(0,0,0,.7);
+  margin-bottom: 18px;
+  animation: titleIn .6s cubic-bezier(.2,.8,.3,1) both;
+}
+body.no-title .title { display: none; }
+.title .star { color: var(--text); opacity: .9; font-size: 20px; animation: twinkle 2.4s ease-in-out infinite; }
+.title .star:last-child { animation-delay: 1.2s; }
+.title-text {
+  background: linear-gradient(100deg, var(--text) 10%, #fff 40%, var(--text) 60%, rgba(255,255,255,.75) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: sheen 5s linear infinite;
+}
+@keyframes twinkle { 0%,100% { transform: scale(1); opacity: .9 } 50% { transform: scale(1.35) rotate(20deg); opacity: 1 } }
+@keyframes sheen { from { background-position: 150% 0 } to { background-position: -50% 0 } }
+@keyframes titleIn { from { opacity: 0; transform: translateY(-10px) } to { opacity: 1; transform: none } }
+
+/* ============================ medallion ============================ */
+
+.medallion {
+  position: relative;
+  width: 190px; height: 190px;
+  margin: 0 auto 16px;
+  display: grid; place-items: center;
+}
+
+/* thin orbit ring with four sparkles riding it */
+.orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  border: 1.5px solid rgba(255,255,255,.14);
+  animation: spin 14s linear infinite;
+}
+.orbit i {
+  position: absolute;
+  width: 7px; height: 7px;
+  border-radius: 99px;
+  background: var(--accent2);
+  box-shadow: 0 0 12px var(--accent2), 0 0 4px #fff;
+  top: -4px; left: calc(50% - 3.5px);
+  transform-origin: 3.5px 99px;
+}
+.orbit i:nth-child(1) { transform: rotate(0deg); }
+.orbit i:nth-child(2) { transform: rotate(90deg); background: var(--accent); box-shadow: 0 0 12px var(--accent), 0 0 4px #fff; }
+.orbit i:nth-child(3) { transform: rotate(180deg); }
+.orbit i:nth-child(4) { transform: rotate(270deg); background: #ff5c8a; box-shadow: 0 0 12px #ff5c8a, 0 0 4px #fff; }
+body:not(.ring) .orbit { display: none; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.coin {
+  position: relative;
+  width: 128px; height: 128px;
+  border-radius: 99px;
+  padding: 7px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), transparent 42%),
+    conic-gradient(from 210deg, var(--accent), #fff3c4 20%, var(--accent) 45%, #b07a12 70%, var(--accent) 100%);
+  box-shadow:
+    0 14px 34px -12px rgba(0,0,0,.9),
+    inset 0 -6px 14px rgba(0,0,0,.35),
+    inset 0 5px 10px rgba(255,255,255,.5);
+  animation: bob 4.2s ease-in-out infinite;
+}
+body.glow .coin { box-shadow: 0 14px 34px -12px rgba(0,0,0,.9), inset 0 -6px 14px rgba(0,0,0,.35), inset 0 5px 10px rgba(255,255,255,.5), 0 0 44px -6px var(--accent); }
+body.mode-gifter .coin { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), transparent 42%), conic-gradient(from 210deg, var(--accent2), #e7d6ff 20%, var(--accent2) 45%, #4b2a8a 70%, var(--accent2) 100%); }
+body.mode-gifter.glow .coin { box-shadow: 0 14px 34px -12px rgba(0,0,0,.9), inset 0 -6px 14px rgba(0,0,0,.35), inset 0 5px 10px rgba(255,255,255,.5), 0 0 44px -6px var(--accent2); }
+@keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+
+.coin-face {
+  width: 100%; height: 100%;
+  border-radius: 99px;
+  background: radial-gradient(circle at 50% 40%, rgba(0,0,0,.18), rgba(0,0,0,.42));
+  display: grid; place-items: center;
+  overflow: hidden;
+  position: relative;
+}
+.coin-face img {
+  width: 76%; height: 76%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.6));
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+.coin-face img.shown { opacity: 1; }
+.coin-face img.round { width: 100%; height: 100%; object-fit: cover; border-radius: 99px; }
+.coin-face .letter {
+  font-size: 46px; font-weight: 900; color: #fff;
+  text-shadow: 0 4px 12px rgba(0,0,0,.6);
+}
+.coin-face .glyph { font-size: 52px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
+
+.coin-badge {
+  position: absolute;
+  top: -4px; right: -6px;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  font-size: 20px;
+  color: #fff8e6;
+  background: linear-gradient(140deg, #ffd66b, var(--accent));
+  box-shadow: 0 8px 20px -8px rgba(0,0,0,.9), 0 0 16px -2px var(--accent);
+  transform: rotate(12deg);
+  animation: badgePop 3s ease-in-out infinite;
+}
+@keyframes badgePop { 0%,100% { transform: rotate(12deg) scale(1) } 50% { transform: rotate(4deg) scale(1.1) } }
+
+/* the whole medallion punches when a combo climbs */
+.medallion.punch { animation: punch .34s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes punch { 0% { transform: scale(1) } 40% { transform: scale(1.12) } 100% { transform: scale(1) } }
+
+/* ============================ text ============================ */
+
+.name {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  text-shadow: 0 3px 14px rgba(0,0,0,.75);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 8px;
+}
+
+.stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 0 0 18px rgba(255,181,71,.55), 0 2px 10px rgba(0,0,0,.7);
+}
+body.mode-gifter .stat { color: var(--accent2); text-shadow: 0 0 18px rgba(169,112,255,.55), 0 2px 10px rgba(0,0,0,.7); }
+.stat-dot {
+  width: 14px; height: 14px;
+  border-radius: 99px;
+  background: radial-gradient(circle at 35% 30%, #fff5cf, var(--accent) 60%, #b07a12);
+  box-shadow: 0 0 12px var(--accent);
+}
+body.mode-gifter .stat-dot { background: radial-gradient(circle at 35% 30%, #f3e9ff, var(--accent2) 60%, #4b2a8a); box-shadow: 0 0 12px var(--accent2); }
+.stat-value { font-variant-numeric: tabular-nums; }
+.stat-value.bump { animation: bump .3s cubic-bezier(.2,.9,.3,1.5); }
+@keyframes bump { 0% { transform: scale(1) } 50% { transform: scale(1.35) } 100% { transform: scale(1) } }
+
+.sub {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: .75;
+  text-shadow: 0 2px 10px rgba(0,0,0,.7);
+  min-height: 18px;
+}
+body.no-sub .sub { display: none; }
+
+/* live combo indicator */
+.panel.live .title-text::after {
+  content: " LIVE";
+  font-size: 12px;
+  letter-spacing: 2px;
+  vertical-align: middle;
+  color: #ff5c8a;
+  -webkit-text-fill-color: #ff5c8a;
+  animation: blink 1s ease-in-out infinite;
+}
+@keyframes blink { 50% { opacity: .35 } }
+
+/* ============================ transitions ============================ */
+
+/* Keyframes only - no CSS transitions on the same properties. Mixing the two
+   left the panel stuck invisible after a swap, because the transition and the
+   entry animation fought over opacity. With the base state at full opacity and
+   every animation class removed when it finishes, it cannot get stuck. */
+.panel { opacity: 1; }
+.panel.out { animation: panelOut .3s ease forwards; }
+.panel.enter { animation: panelIn .5s cubic-bezier(.2,.8,.3,1); }
+@keyframes panelOut { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(8px) scale(.98) } }
+@keyframes panelIn { from { opacity: 0; transform: translateY(14px) scale(.96) } to { opacity: 1; transform: none } }
+
+/* ============================ empty ============================ */
+
+.empty {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 240px;
+  font-size: 16px;
+  font-weight: 700;
+  opacity: .85;
+  text-shadow: 0 2px 10px rgba(0,0,0,.7);
+}
+body.is-empty .empty { display: flex; }
+body.is-empty .panel { display: none; }
+.pulse {
+  width: 9px; height: 9px; border-radius: 99px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  animation: pulseDot 1.8s ease-in-out infinite;
+}
+@keyframes pulseDot { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.6); opacity: .5 } }

@@ -1,0 +1,4 @@
+{
+  "_readme": "Optional. Copy to app-config.json to bake a Twitch Client ID into your build so users never have to create a Twitch app. The app must have the OAuth Redirect URL http://localhost:43111 and client type Public. In CI this file is generated from the STEEZ_TWITCH_CLIENT_ID repository secret.",
+  "twitchClientId": ""
+}

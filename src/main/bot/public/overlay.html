@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stream Overlay</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; color: #f0f0f0; }
+    .shadow { text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+    #fx { position: fixed; inset: 0; pointer-events: none; }
+    /* Alerts */
+    #alert { position: fixed; top: 60px; left: 50%; transform: translate(-50%, -8px); text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
+    #alert.show { opacity: 1; transform: translate(-50%, 0); }
+    #alert .box { background: rgba(20,20,20,.94); border: 1px solid #3c3c3c; border-top: 3px solid #dcdcdc; padding: 18px 36px 20px; min-width: 400px; }
+    #alert .icon { font-size: 44px; animation: pop .5s; }
+    #alert .title { font-size: 30px; font-weight: 700; letter-spacing: .01em; }
+    #alert .title b { color: #ffffff; }
+    #alert .msg { font-size: 20px; margin-top: 6px; color: #b4b4b4; max-width: 640px; }
+    @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+    /* Boss */
+    #boss { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); width: 760px; display: none; }
+    #boss .name { font-size: 24px; font-weight: 700; text-align: center; letter-spacing: .02em; }
+    #boss .hpbar { height: 26px; background: rgba(15,15,15,.9); border: 1px solid #4a4a4a; overflow: hidden; margin-top: 6px; position: relative; }
+    #boss .hp { height: 100%; background: #c9605a; transition: width .4s; }
+    #boss .hptext { position: absolute; inset: 0; text-align: center; line-height: 24px; font-weight: 700; font-size: 14px; }
+    #boss .top { text-align: center; margin-top: 6px; font-size: 15px; color: #cfcfcf; }
+    #boss.hit .hpbar { animation: shake .25s; }
+    /* Poll & bets */
+    .panel { position: fixed; right: 24px; width: 420px; background: rgba(20,20,20,.94); border: 1px solid #3c3c3c; border-left: 3px solid #dcdcdc; padding: 14px 18px; display: none; }
+    #poll { top: 24px; }
+    #bets { top: 320px; }
+    .panel .q { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+    .opt { margin: 8px 0; }
+    .opt .lbl { display: flex; justify-content: space-between; font-size: 15px; }
+    .opt .bar { height: 8px; background: #2c2c2c; overflow: hidden; margin-top: 4px; }
+    .opt .bar i { display: block; height: 100%; background: #dcdcdc; transition: width .4s; }
+    /* Hype */
+    #hype { position: fixed; left: 24px; bottom: 24px; width: 300px; display: none; }
+    #hype .lbl { font-weight: 700; font-size: 16px; letter-spacing: .06em; text-transform: uppercase; }
+    #hype .bar { height: 12px; background: rgba(15,15,15,.9); border: 1px solid #4a4a4a; overflow: hidden; margin-top: 5px; }
+    #hype .bar i { display: block; height: 100%; width: 0; background: #dcdcdc; transition: width .8s, background .3s; }
+    #hype.hot .bar i { background: #c9605a; }
+    #hype.hot .lbl { animation: pulse .6s infinite alternate; }
+    @keyframes pulse { to { color: #ffffff; transform: translateX(2px); } }
+    /* Song */
+    #song { position: fixed; right: 24px; bottom: 24px; max-width: 520px; background: rgba(20,20,20,.94); padding: 10px 14px; display: none; align-items: center; gap: 12px; border: 1px solid #3c3c3c; }
+    #song img { width: 64px; height: 48px; object-fit: cover; }
+    #song .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+    #song .r { font-size: 13px; color: #a8a8a8; }
+    /* Effects */
+    #spot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 104px; font-weight: 800; opacity: 0; transition: opacity .5s; text-align: center; letter-spacing: .04em; }
+    #spot.show { opacity: 1; animation: glow 1s infinite alternate; }
+    @keyframes glow { from { text-shadow: 0 0 18px rgba(255,255,255,.35); } to { text-shadow: 0 0 46px rgba(255,255,255,.75); } }
+    #tts { position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); background: rgba(20,20,20,.94); border: 1px solid #3c3c3c; border-left: 3px solid #dcdcdc; padding: 12px 22px; font-size: 23px; max-width: 900px; display: none; }
+    body.shake { animation: shake .5s 2; }
+    @keyframes shake { 0%,100% { transform: translate(0,0); } 20% { transform: translate(-14px,6px); } 40% { transform: translate(12px,-8px); } 60% { transform: translate(-8px,10px); } 80% { transform: translate(10px,-4px); } }
+    .rain { position: fixed; top: -120px; pointer-events: none; font-size: 56px; }
+    .rain img { width: 84px; height: 84px; }
+  </style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div id="alert" class="shadow"><div class="box"><div class="icon"></div><div class="title"></div><div class="msg"></div></div></div>
+  <div id="boss" class="shadow"><div class="name"></div><div class="hpbar"><div class="hp"></div><div class="hptext"></div></div><div class="top"></div></div>
+  <div id="poll" class="panel shadow"></div>
+  <div id="bets" class="panel shadow"></div>
+  <div id="hype" class="shadow"><div class="lbl">🔥 HYPE</div><div class="bar"><i></i></div></div>
+  <div id="song" class="shadow"><img alt="" /><div><div class="t"></div><div class="r"></div></div></div>
+  <div id="spot" class="shadow"></div>
+  <div id="tts" class="shadow"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const W = new Set((params.get('widgets') || 'alerts,effects,boss,poll,bets,hype,song').split(',').map((s) => s.trim()));
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    let cfg = { alertDurationSeconds: 7, ttsVoice: '', ttsRate: 1, alertSound: true, ttsAlertMessages: true };
+
+    // ── Sound & speech ──
+    let actx;
+    function chime() {
+      if (!cfg.alertSound) return;
+      try {
+        actx ||= new AudioContext();
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+          const o = actx.createOscillator(), g = actx.createGain();
+          o.type = 'triangle'; o.frequency.value = f;
+          g.gain.setValueAtTime(0, actx.currentTime + i * 0.09);
+          g.gain.linearRampToValueAtTime(0.18, actx.currentTime + i * 0.09 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + i * 0.09 + 0.6);
+          o.connect(g).connect(actx.destination); o.start(actx.currentTime + i * 0.09); o.stop(actx.currentTime + i * 0.09 + 0.7);
+        });
+      } catch {}
+    }
+    function speak(text, onend) {
+      if (!('speechSynthesis' in window) || !text) return onend?.();
+      const u = new SpeechSynthesisUtterance(text.slice(0, 300));
+      u.rate = cfg.ttsRate || 1;
+      const v = speechSynthesis.getVoices().find((x) => cfg.ttsVoice && x.name.toLowerCase().includes(cfg.ttsVoice.toLowerCase()));
+      if (v) u.voice = v;
+      u.onend = () => onend?.();
+      u.onerror = () => onend?.();
+      speechSynthesis.speak(u);
+    }
+
+    // ── Alerts ──
+    const ALERTS = {
+      follow: (a) => ['💜', `<b>${esc(a.user)}</b> just followed!`, ''],
+      sub: (a) => ['⭐', `<b>${esc(a.user)}</b> subscribed!`, esc(a.tier)],
+      resub: (a) => ['🌟', `<b>${esc(a.user)}</b> — ${esc(a.months)} months!`, esc(a.message)],
+      giftsub: (a) => (a.amount ? ['🎁', `<b>${esc(a.user)}</b> gifted a sub!`, `to ${esc(a.recipient)}`] : null),
+      giftbomb: (a) => ['🎁', `<b>${esc(a.user)}</b> gifted ${esc(a.amount)} subs!`, 'Thank you!'],
+      cheer: (a) => ['💎', `<b>${esc(a.user)}</b> cheered ${esc(a.amount)} bits!`, esc(a.message)],
+      raid: (a) => ['🚨', `<b>${esc(a.user)}</b> is raiding!`, `with ${esc(a.amount)} viewers`],
+      redemption: (a) => ['✨', `<b>${esc(a.user)}</b> redeemed`, esc(a.reward) + (a.message ? ` — ${esc(a.message)}` : '')],
+      achievement: (a) => ['🏆', `<b>${esc(a.user)}</b> unlocked`, esc(a.message)],
+      fish: (a) => ['🐙', `<b>${esc(a.user)}</b> ${esc(a.message)}`, `worth ${esc(a.amount)}`],
+      giveaway: (a) => ['🎉', `<b>${esc(a.user)}</b> ${esc(a.message)}`, ''],
+    };
+    const queue = [];
+    let busy = false;
+    function nextAlert() {
+      if (busy || !queue.length) return;
+      const a = queue.shift();
+      const r = ALERTS[a.type]?.(a);
+      if (!r) return nextAlert();
+      busy = true;
+      const el = $('alert');
+      el.querySelector('.icon').textContent = r[0];
+      el.querySelector('.title').innerHTML = r[1];
+      el.querySelector('.msg').innerHTML = r[2];
+      el.classList.add('show');
+      chime();
+      if (['follow', 'sub', 'giftbomb', 'raid'].includes(a.type)) confetti(120);
+      const ttsText = cfg.ttsAlertMessages && ['resub', 'cheer'].includes(a.type) && a.message ? `${a.user} says: ${a.message}` : '';
+      let doneSpeaking = !ttsText, doneTimer = false;
+      const finish = () => {
+        if (!doneSpeaking || !doneTimer) return;
+        el.classList.remove('show');
+        setTimeout(() => { busy = false; nextAlert(); }, 600);
+      };
+      if (ttsText) setTimeout(() => speak(ttsText, () => { doneSpeaking = true; finish(); }), 800);
+      setTimeout(() => { doneTimer = true; finish(); }, (cfg.alertDurationSeconds || 7) * 1000);
+    }
+
+    // ── Confetti / particles ──
+    const cv = $('fx'), cx = cv.getContext('2d');
+    let parts = [];
+    const resize = () => { cv.width = innerWidth; cv.height = innerHeight; };
+    addEventListener('resize', resize); resize();
+    const COLORS = ['#ffffff', '#e0e0e0', '#bdbdbd', '#9a9a9a', '#6f6f6f', '#c9605a'];
+    function confetti(n = 250) {
+      for (let i = 0; i < n; i++)
+        parts.push({ x: cv.width / 2 + (Math.random() - 0.5) * 200, y: cv.height * 0.35, vx: (Math.random() - 0.5) * 22, vy: -Math.random() * 20 - 6, r: Math.random() * 7 + 4, c: COLORS[(Math.random() * COLORS.length) | 0], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.4, life: 1 });
+    }
+    (function loop() {
+      cx.clearRect(0, 0, cv.width, cv.height);
+      parts = parts.filter((p) => p.life > 0 && p.y < cv.height + 40);
+      for (const p of parts) {
+        p.vy += 0.45; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; p.life -= 0.004;
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.a); cx.globalAlpha = Math.min(1, p.life * 2); cx.fillStyle = p.c; cx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); cx.restore();
+      }
+      requestAnimationFrame(loop);
+    })();
+
+    function emoteRain(emotes) {
+      const items = emotes?.length ? emotes.map((e) => `<img src="https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(e.id)}/default/dark/3.0" alt="">`) : ['🎉', '💜', '✨', '🔥', '😂', '⭐'];
+      for (let i = 0; i < 60; i++) {
+        const d = document.createElement('div');
+        d.className = 'rain';
+        d.innerHTML = items[i % items.length];
+        d.style.left = Math.random() * 100 + 'vw';
+        const t = 2.5 + Math.random() * 2.5;
+        d.animate([{ transform: 'translateY(0) rotate(0)' }, { transform: `translateY(${innerHeight + 240}px) rotate(${(Math.random() - 0.5) * 720}deg)` }], { duration: t * 1000, delay: Math.random() * 2500, easing: 'ease-in' }).onfinish = () => d.remove();
+        document.body.append(d);
+      }
+    }
+
+    function effect(e) {
+      if (!W.has('effects')) return;
+      switch (e.effect) {
+        case 'confetti': return confetti(300);
+        case 'emoterain': return emoteRain(e.emotes);
+        case 'shake': document.body.classList.remove('shake'); void document.body.offsetWidth; document.body.classList.add('shake'); return;
+        case 'spotlight': {
+          const s = $('spot'); s.textContent = `✨ ${e.user} ✨`; s.classList.add('show'); confetti(150);
+          return setTimeout(() => s.classList.remove('show'), 4500);
+        }
+        case 'tts': {
+          const t = $('tts'); t.textContent = `🔊 ${e.user}: ${e.text}`; t.style.display = 'block';
+          return speak(`${e.user} says: ${e.text}`, () => (t.style.display = 'none'));
+        }
+      }
+    }
+
+    // ── Widgets ──
+    let lastHp = null;
+    function boss(b) {
+      const el = $('boss');
+      if (!W.has('boss') || !b) { el.style.display = 'none'; lastHp = null; return; }
+      el.style.display = 'block';
+      el.querySelector('.name').textContent = `${b.emoji} ${b.name}`;
+      el.querySelector('.hp').style.width = `${(b.hp / b.maxHp) * 100}%`;
+      el.querySelector('.hptext').textContent = `${b.hp.toLocaleString()} / ${b.maxHp.toLocaleString()} HP — type !attack`;
+      el.querySelector('.top').textContent = b.top.length ? '⚔️ ' + b.top.map((t, i) => `${['🥇', '🥈', '🥉'][i]} ${t.user} (${t.dmg})`).join('   ') : '';
+      if (lastHp != null && b.hp < lastHp) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
+      lastHp = b.hp;
+    }
+    function bars(el, title, opts, totalKey) {
+      el.innerHTML = `<div class="q">${esc(title)}</div>` + opts.map((o, i) => `<div class="opt"><div class="lbl"><span>${i + 1}. ${esc(o.text)}</span><span>${esc(o.right)}</span></div><div class="bar"><i style="width:${o.pct}%"></i></div></div>`).join('');
+    }
+    function poll(p) {
+      const el = $('poll');
+      if (!W.has('poll') || !p) return (el.style.display = 'none');
+      el.style.display = 'block';
+      bars(el, `📊 ${p.question}${p.open ? '' : ' (closed)'}`, p.options.map((o) => ({ text: o.text, right: o.votes, pct: p.total ? (o.votes / p.total) * 100 : 0 })));
+      el.insertAdjacentHTML('beforeend', `<div style="opacity:.7;font-size:14px">${p.open ? 'Vote with !vote <number>' : ''}</div>`);
+    }
+    function bets(b) {
+      const el = $('bets');
+      if (!W.has('bets') || !b) return (el.style.display = 'none');
+      el.style.display = 'block';
+      const total = b.options.reduce((s, o) => s + o.pool, 0);
+      bars(el, `🎲 ${b.question}${b.open ? '' : ' 🔒'}`, b.options.map((o) => ({ text: o.text, right: `${o.pool.toLocaleString()} (${total ? (total / Math.max(1, o.pool)).toFixed(1) : '–'}x)`, pct: total ? (o.pool / total) * 100 : 0 })));
+      el.insertAdjacentHTML('beforeend', `<div style="opacity:.7;font-size:14px">${b.open ? '!bet <number> <amount>' : 'Bets locked'}</div>`);
+    }
+    function hype(d) {
+      if (!W.has('hype')) return;
+      const el = $('hype');
+      el.style.display = d.mpm > 0 ? 'block' : 'none';
+      el.querySelector('i').style.width = `${Math.round(d.level * 100)}%`;
+      el.querySelector('.lbl').textContent = d.level >= 1 ? '🔥🔥 HYPE!! 🔥🔥' : `🔥 Hype ${Math.round(d.level * 100)}%`;
+      el.classList.toggle('hot', d.level >= 1);
+    }
+    function song(s) {
+      const el = $('song');
+      if (!W.has('song') || !s?.current) return (el.style.display = 'none');
+      el.style.display = 'flex';
+      el.querySelector('img').src = `https://i.ytimg.com/vi/${encodeURIComponent(s.current.videoId)}/mqdefault.jpg`;
+      el.querySelector('.t').textContent = `🎵 ${s.current.title}`;
+      el.querySelector('.r').textContent = `requested by ${s.current.requestedBy}${s.queue.length ? ` · ${s.queue.length} in queue · !sr to request` : ' · !sr to request'}`;
+    }
+
+    function connect() {
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      ws.onmessage = (ev) => {
+        const { type, data } = JSON.parse(ev.data);
+        if (type === 'hello') { Object.assign(cfg, data.settings?.overlay || {}); boss(data.boss); poll(data.poll); bets(data.bets); song(data.songs); }
+        else if (type === 'settings') Object.assign(cfg, data.overlay || {});
+        else if (type === 'alert' && W.has('alerts')) { queue.push(data); nextAlert(); }
+        else if (type === 'effect') effect(data);
+        else if (type === 'boss') boss(data);
+        else if (type === 'poll') poll(data);
+        else if (type === 'bets') bets(data);
+        else if (type === 'hype') hype(data);
+        else if (type === 'songs') song(data);
+      };
+      ws.onclose = () => setTimeout(connect, 3000);
+    }
+    connect();
+  </script>
+</body>
+</html>

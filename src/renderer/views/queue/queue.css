@@ -1,0 +1,111 @@
+/* Viewer Queue + TikTok Gifts pages. Steez tokens only: square, 1px lines, greys. */
+
+/* ─── Page header / toolbar ─── */
+.qu-open { gap: 9px; cursor: pointer; color: var(--text-2); }
+.qu-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.qu-toolbar .right { display: flex; align-items: center; }
+.qu-add { width: 340px; gap: 0; }
+.qu-add input { flex: 1; min-width: 0; border-right: 0; }
+.qu-add .kbd { align-self: stretch; display: flex; align-items: center; border-left: 0; border-right: 0; background: var(--bg-sunk); color: var(--text-3); padding: 0 8px; }
+.qu-count { color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+/* ─── Queue layout ─── */
+.qu-grid { display: grid; grid-template-columns: minmax(330px, 400px) 1fr; gap: 14px; align-items: start; }
+@media (max-width: 1150px) { .qu-grid { grid-template-columns: 1fr; } }
+.qu-col { min-width: 0; }
+.qu-zone { min-width: 0; }
+.qu-zone > .panel { overflow: visible; transition: border-color .1s; }
+.qu-zone.over > .panel { border-color: var(--focus); }
+
+/* ─── Rows ─── */
+.qu-list { position: relative; }
+.qu-row {
+  display: grid; grid-template-columns: 22px 28px minmax(0, 1fr) 62px auto; align-items: center; gap: 10px;
+  padding: 6px 8px; margin-bottom: 4px; background: var(--surface-2); border: 1px solid var(--line);
+  user-select: none; cursor: grab; animation: quIn .16s ease-out;
+}
+.qu-row:hover { border-color: var(--line-2); background: var(--surface-3); }
+.qu-row:last-child { margin-bottom: 0; }
+.qu-host { grid-template-columns: 22px 28px minmax(0, 1fr) auto; cursor: default; margin-bottom: 4px; background: var(--surface); border-style: dashed; }
+.qu-host:hover { background: var(--surface); border-color: var(--line); }
+.qu-dragsrc { opacity: .35; }
+.qu-ghost { position: fixed; z-index: 100; pointer-events: none; margin: 0; background: var(--surface-3); border-color: var(--accent); cursor: grabbing; animation: none; }
+.qu-dropline { height: 2px; background: var(--accent); margin: -3px 0 1px; }
+@keyframes quIn { from { opacity: 0; transform: translateY(-3px); } }
+
+.qu-rank { color: var(--text-3); font-size: 11.5px; text-align: center; font-variant-numeric: tabular-nums; }
+.qu-av { display: inline-grid; place-items: center; overflow: hidden; flex: none; color: var(--text); font-weight: 600; font-size: 12px; border: 1px solid var(--line-2); }
+.qu-av svg { stroke: currentColor; fill: none; stroke-width: 1.5; }
+.qu-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.qu-host-av { width: 28px; height: 28px; background: var(--surface-3); color: var(--text-2); }
+.qu-host-av svg { stroke: currentColor; fill: none; stroke-width: 1.5; }
+.qu-main { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.qu-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; }
+.qu-meta { color: var(--text-3); font-size: 11px; }
+.qu-badge { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; padding: 0 4px; border: 1px solid var(--line-2); color: var(--text-2); flex: none; }
+.qu-badge.sub { color: var(--accent-hi); border-color: var(--text-3); }
+.qu-timer { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.qu-timer.warm { color: var(--warn); }
+.qu-timer.hot { color: var(--bad); }
+.qu-actions { display: flex; gap: 2px; }
+.qu-actions button.icon { width: 26px; height: 26px; padding: 4px; }
+.qu-actions button.qu-rm:hover { color: #e09a95; }
+.qu-slot { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: center; padding: 10px 8px; margin-top: 4px; border: 1px dashed var(--line-2); color: var(--text-3); font-size: 12px; }
+.qu-listhead { display: grid; grid-template-columns: 22px 28px minmax(0, 1fr) 62px 56px; gap: 10px; padding: 0 9px 6px; color: var(--text-3); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.qu-listhead span:nth-child(4) { text-align: right; }
+.qu-queue-panel .empty { margin-top: 4px; }
+
+/* ─── Activity ─── */
+.qu-log { max-height: 280px; overflow-y: auto; margin: -4px 0; }
+.qu-log-item { display: grid; grid-template-columns: 40px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--text-2); }
+.qu-log-item:last-child { border-bottom: 0; }
+.qu-log-item.join { color: var(--text); }
+.qu-log-item.warn { color: var(--warn); }
+.qu-log-item.error { color: #e09a95; }
+
+/* ─── Rules ─── */
+.qu-fields { gap: 0 14px; }
+
+/* ─── Overlay editor ─── */
+.qu-editor { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.15fr); gap: 14px; align-items: start; }
+@media (max-width: 1150px) { .qu-editor { grid-template-columns: 1fr; } }
+.qu-preview-col { position: sticky; top: 0; }
+.qu-ctl { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 32px; padding: 3px 0; }
+.qu-ctl + .qu-ctl { border-top: 1px solid var(--line); }
+.qu-ctl-l { color: var(--text-2); font-size: 12px; }
+.qu-ctl-c { display: flex; align-items: center; min-width: 0; }
+.qu-ctl-c > input[type=range] { width: 100%; }
+.qu-ctl-v { font-family: var(--mono); font-size: 11.5px; font-weight: 400; color: var(--text); min-width: 52px; text-align: right; }
+.qu-ctl .seg button { padding: 4px 10px; }
+.qu-url { margin-bottom: 10px; gap: 6px; }
+.qu-url input { flex: 1; min-width: 0; color: var(--text-2); }
+.qu-stage { height: 520px; border: 1px solid var(--line); overflow: hidden; }
+/* color-scheme must match the overlay page's (normal), or Chromium paints the frame opaque white. */
+.qu-stage iframe { width: 100%; height: 100%; border: 0; display: block; background: transparent; color-scheme: normal; }
+.qu-stage.bg-checker {
+  background: #1d1d1d url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='8' height='8' fill='%23272727'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23272727'/%3E%3C/svg%3E");
+}
+.qu-stage.bg-dark { background: #0a0a0a; }
+.qu-stage.bg-mid { background: #5a5a5a; }
+.qu-stage.bg-light { background: #d9d9d9; }
+.qu-obs { margin-top: 10px; }
+.qu-obs b { color: var(--text-2); font-weight: 600; }
+.qu-confirm-msg { margin: 0 0 18px; }
+
+/* ─── TikTok gifts ─── */
+.qu-gifts-grid { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 14px; align-items: start; }
+@media (max-width: 1150px) { .qu-gifts-grid { grid-template-columns: 1fr; } }
+.qu-at { gap: 6px; }
+.qu-at input { flex: 1; min-width: 0; }
+.qu-at-sign { color: var(--text-3); font-family: var(--mono); padding: 0 2px 0 4px; }
+.qu-tt-status { margin-top: 12px; }
+.qu-tt-status .help { margin-top: 6px; }
+.qu-stats { gap: 8px; }
+.qu-stats .stat { flex: 1; min-width: 0; }
+.qu-streak { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.qu-streak-count { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; animation: quBump .22s ease-out; }
+@keyframes quBump { from { transform: scale(1.18); } }
+.qu-gl { grid-template-columns: 22px 28px minmax(0, 1fr) 56px 88px; cursor: default; }
+.qu-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.qu-num.strong { color: var(--text); font-weight: 600; }
+.qu-listhead.qu-gl span:nth-child(4), .qu-listhead.qu-gl span:nth-child(5) { text-align: right; }

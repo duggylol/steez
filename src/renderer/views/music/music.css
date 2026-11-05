@@ -1,0 +1,165 @@
+/* Song Requests — built on steez.css tokens only. Square, 1px lines, greys, no gradients. */
+
+/* ─── Layout ───────────────────────────────────────────────────── */
+.mu-layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 236px minmax(0, 1fr) 344px;
+  grid-template-areas: 'lib main queue';
+  align-items: start;
+}
+.mu-layout .panel { margin-bottom: 0; }
+.mu-lib { grid-area: lib; }
+.mu-main { grid-area: main; min-width: 0; }
+.mu-queue { grid-area: queue; }
+@media (max-width: 1440px) {
+  .mu-layout { grid-template-columns: minmax(0, 1fr) 330px; grid-template-areas: 'main queue' 'lib queue'; }
+}
+@media (max-width: 1160px) {
+  .mu-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'main' 'queue' 'lib'; }
+}
+.mu-queue .mu-list, .mu-lib .mu-list { max-height: calc(100vh - 252px); min-height: 120px; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+/* When the library sits under the player it gets the full width: lay playlists out in columns. */
+@media (max-width: 1440px) {
+  .mu-lib .mu-list { max-height: 300px; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); align-content: start; column-gap: 6px; }
+}
+
+.mu-art svg, .mu-thumb svg, .mu-search-input svg, .mu-volume svg { stroke: currentColor; fill: none; stroke-width: 1.4; }
+
+/* ─── Search ───────────────────────────────────────────────────── */
+.mu-search { position: relative; margin-bottom: 14px; }
+.mu-search-input { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: var(--bg-sunk); border: 1px solid var(--line-2); color: var(--text-3); transition: border-color .1s; }
+.mu-search-input:hover { border-color: #474747; }
+.mu-search-input:focus-within { border-color: #6a6a6a; }
+.mu-search-input svg { width: 15px; height: 15px; flex: none; }
+.mu-search-input input { border: 0; background: transparent; padding: 0; height: 100%; font-size: 13.5px; }
+.mu-search-input input:focus-visible { outline: none; }
+.mu-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: min(62vh, 560px); overflow-y: auto; background: var(--surface-2); border: 1px solid var(--line-2); padding-bottom: 4px; animation: muDrop .14s ease-out; }
+.mu-result { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; cursor: pointer; }
+.mu-result:hover { background: var(--hover); }
+.mu-result button.icon { width: 26px; height: 26px; }
+
+/* ─── Popovers (device picker, search) ─────────────────────────── */
+.mu-pop { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 20; min-width: 250px; padding: 4px 0; background: var(--surface-2); border: 1px solid var(--line-2); animation: muFade .12s ease-out; }
+.mu-pop-label { padding: 8px 12px 4px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.mu-pop-hint { padding: 10px 12px; color: var(--text-3); }
+.mu-pop-item { display: flex; width: 100%; gap: 10px; justify-content: flex-start; text-align: left; padding: 7px 12px; border: 0; background: transparent; }
+.mu-pop-item:hover { background: var(--hover); border: 0; }
+.mu-pop-item.on { color: var(--accent-hi); }
+
+/* ─── Now playing ──────────────────────────────────────────────── */
+.mu-np { overflow: visible; } /* the device picker opens above the panel edge */
+.mu-np .banner { margin: -2px 0 16px; }
+.mu-np-body { display: flex; gap: 20px; align-items: stretch; }
+.mu-art { width: 184px; height: 184px; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--bg-sunk); border: 1px solid var(--line); color: var(--text-3); }
+.mu-art img { width: 100%; height: 100%; object-fit: cover; display: block; animation: muFade .35s ease-out; }
+.mu-np-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
+.mu-np-meta { display: flex; align-items: center; gap: 10px; margin-bottom: auto; min-height: 20px; }
+.mu-np-meta .tag { margin: 0; }
+.mu-np-text { animation: muRise .3s ease-out; }
+.mu-np-title { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-np-artist { color: var(--text-2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mu-progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.mu-time { font: 11px var(--mono); color: var(--text-3); min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; flex: none; }
+.mu-bar { position: relative; flex: 1; height: 16px; cursor: pointer; touch-action: none; }
+.mu-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 7px; height: 2px; background: var(--surface-3); }
+.mu-bar i { position: absolute; left: 0; top: 7px; height: 2px; background: var(--accent); }
+.mu-bar b { position: absolute; top: 3px; width: 3px; height: 10px; margin-left: -1px; background: var(--accent-hi); opacity: 0; transition: opacity .1s; }
+.mu-bar:hover b, .mu-bar.drag b { opacity: 1; }
+.mu-bar.off { cursor: default; }
+.mu-bar.off b { display: none; }
+
+.mu-transport { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.mu-transport button.icon { width: 32px; height: 32px; }
+.mu-play { width: 40px; height: 40px; padding: 0; }
+.mu-play svg { width: 16px; height: 16px; stroke-width: 2; }
+.mu-volume { display: flex; align-items: center; gap: 8px; width: 150px; color: var(--text-2); margin-right: 4px; }
+.mu-volume svg { width: 15px; height: 15px; flex: none; }
+.mu-device { position: relative; }
+.mu-device > button { max-width: 190px; }
+
+/* ─── Rows (queue, results, library) ───────────────────────────── */
+.mu-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mu-row:last-child { border-bottom: 0; }
+.mu-row.ghost { opacity: .55; }
+.mu-row.deck .mu-idx { color: var(--accent-hi); }
+.mu-idx { width: 18px; flex: none; text-align: right; font: 11px var(--mono); color: var(--text-3); }
+.mu-thumb { width: 38px; height: 38px; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--bg-sunk); border: 1px solid var(--line); color: var(--text-3); }
+.mu-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mu-thumb svg { width: 15px; height: 15px; }
+.mu-row-text { flex: 1; min-width: 0; }
+.mu-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-row-sub { color: var(--text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-row-tags { margin-top: 3px; }
+.mu-row-tags .tag { font-size: 10px; }
+.mu-deck-tag { color: var(--text); background: var(--line-2); }
+/* Actions replace the duration on hover, so titles keep the full width otherwise. */
+.mu-row-actions { display: none; gap: 2px; animation: muFade .1s; }
+.mu-row:hover .mu-row-actions, .mu-row-actions:focus-within { display: flex; }
+.mu-row:hover > .mu-time:has(+ .mu-row-actions) { display: none; }
+.mu-row-actions button.icon { width: 26px; height: 26px; }
+.mu-sublabel { margin: 18px 0 2px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+
+.mu-pl { display: flex; width: 100%; gap: 10px; align-items: center; justify-content: flex-start; text-align: left; padding: 6px 8px; border: 0; border-left: 2px solid transparent; background: transparent; }
+.mu-pl:hover { background: var(--hover); border-color: transparent; }
+.mu-pl.on { border-left-color: var(--accent); background: var(--surface-2); }
+.mu-pl:disabled { opacity: 1; }
+.mu-lib-empty p { margin: 0 0 12px; }
+button.mu-on { color: var(--text); background: var(--surface-3); }
+
+.mu-eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.mu-eq i { width: 2px; height: 100%; background: var(--accent); transform-origin: bottom; animation: muEq .9s ease-in-out infinite; }
+.mu-eq i:nth-child(1) { animation-delay: -.25s; }
+.mu-eq i:nth-child(2) { animation-delay: -.55s; }
+.mu-spin { width: 12px; height: 12px; flex: none; border: 1.5px solid var(--line-2); border-top-color: var(--accent); animation: muSpin .7s linear infinite; }
+
+/* ─── Settings ─────────────────────────────────────────────────── */
+.mu-subhead { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text); font-weight: 600; margin-bottom: 8px; }
+.mu-diag { margin: 12px 0 0; padding: 10px 12px; background: var(--bg-sunk); border: 1px solid var(--line); color: var(--text-2); font: 11.5px/1.6 var(--mono); white-space: pre-wrap; }
+.mu-field { margin-bottom: 11px; }
+.mu-field > span { display: block; color: var(--text-2); font-size: 11px; letter-spacing: .04em; margin-bottom: 5px; }
+.mu-copy { margin-top: 6px; }
+.mu-copy code { display: block; padding: 5px 9px; background: var(--bg-sunk); border: 1px solid var(--line); color: var(--text); user-select: all; }
+
+/* ─── Setup guide ──────────────────────────────────────────────── */
+.mu-setup { max-width: 1000px; }
+.mu-stepper { display: flex; border: 1px solid var(--line); margin-bottom: 14px; background: var(--surface); }
+.mu-stepper button { flex: 1; min-width: 0; justify-content: flex-start; gap: 8px; padding: 9px 12px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.mu-stepper button:last-child { border-right: 0; }
+.mu-stepper button:disabled { opacity: 1; }
+.mu-stepper button:hover { background: var(--hover); border-color: var(--line); }
+.mu-stepper button span { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-2); font: 10.5px var(--mono); }
+.mu-stepper button.on { color: var(--text); background: var(--surface-2); box-shadow: inset 0 -2px 0 var(--accent); }
+.mu-stepper button.done { color: var(--text-2); }
+.mu-stepper button.done span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.mu-setup-card { padding: 22px 24px 16px; }
+.mu-setup-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; animation: muRise .2s ease-out; }
+.mu-setup-text h2 { margin: 6px 0 6px; font-size: 21px; }
+.mu-setup-text > p { margin: 0 0 16px; max-width: 560px; }
+.mu-setup-visual { width: 300px; padding-top: 22px; }
+@media (max-width: 1160px) { .mu-setup-inner { grid-template-columns: minmax(0, 1fr); } .mu-setup-visual { width: auto; max-width: 420px; padding-top: 0; } }
+.mu-setup-nav { display: flex; gap: 8px; margin: 22px -24px -16px; padding: 12px 24px; border-top: 1px solid var(--line); }
+
+.mu-steps { margin: 0 0 14px; padding-left: 20px; color: var(--text-2); }
+.mu-steps li { margin-bottom: 9px; padding-left: 2px; }
+.mu-steps li::marker { color: var(--text-3); font-family: var(--mono); font-size: 11px; }
+.mu-steps b { color: var(--text); font-weight: 600; }
+.mu-steps.plain { list-style: none; padding-left: 0; }
+.mu-steps.plain li { position: relative; padding-left: 16px; }
+.mu-steps.plain li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; background: var(--text-3); }
+
+.mu-mock { background: var(--bg-sunk); border: 1px solid var(--line-2); }
+.mu-mock-bar { padding: 7px 10px; border-bottom: 1px solid var(--line); color: var(--text-3); font: 10.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-mock-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 0; }
+.mu-mock-row:last-child { padding-bottom: 12px; }
+.mu-mock-row span { color: var(--text-3); font-size: 11px; }
+.mu-mock-row b { font: 400 12px var(--mono); padding: 5px 8px; background: var(--surface); border: 1px solid var(--line-2); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-mock-row b.hi { border-color: var(--accent); color: var(--accent-hi); }
+
+/* ─── Motion (small, CSS only) ─────────────────────────────────── */
+@keyframes muFade { from { opacity: 0; } }
+@keyframes muRise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes muDrop { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes muSpin { to { transform: rotate(360deg); } }
+@keyframes muEq { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }

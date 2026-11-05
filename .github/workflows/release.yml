@@ -1,0 +1,40 @@
+# Builds the Windows installer and publishes it as a GitHub Release whenever a version tag
+# (v1.2.3) is pushed. Every installed copy of Steez picks the release up on its next launch.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Bake Twitch Client ID (optional secret)
+        shell: bash
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.STEEZ_TWITCH_CLIENT_ID }}
+        run: |
+          if [ -n "$TWITCH_CLIENT_ID" ]; then
+            printf '{ "twitchClientId": "%s" }\n' "$TWITCH_CLIENT_ID" > app-config.json
+          fi
+
+      - run: npm test
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release

@@ -1,0 +1,45 @@
+{
+  "name": "steez",
+  "productName": "Steez",
+  "version": "0.1.0",
+  "description": "All-in-one streaming companion: Twitch chat bot, song requests (SongSeek) and viewer queue (QueueUp).",
+  "main": "src/main/main.js",
+  "type": "module",
+  "author": "duggylol",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/duggylol/steez.git"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n vite,app \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env STEEZ_DEV=1 electron .\"",
+    "start": "npm run build && electron .",
+    "build": "vite build",
+    "test": "node --test test/*.test.js src/main/queueup/*.test.cjs",
+    "icon": "electron scripts/make-icon.cjs",
+    "dist": "npm run build && electron-builder --win",
+    "release": "npm run build && electron-builder --win --publish always",
+    "ship:patch": "npm version patch && git push --follow-tags",
+    "ship:minor": "npm version minor && git push --follow-tags"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.5.0",
+    "electron-updater": "^6.8.11",
+    "express": "^4.22.3",
+    "tiktok-live-connector": "^2.5.0",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.6",
+    "wait-on": "^9.5.1",
+    "zustand": "^5.0.16"
+  },
+  "homepage": "https://github.com/duggylol/steez"
+}
