@@ -34,6 +34,7 @@ export const NAV = [
       { id: 'quotes', label: 'Quotes', icon: 'quote' },
       { id: 'achievements', label: 'Achievements', icon: 'trophy' },
       { id: 'ai', label: 'AI', icon: 'spark' },
+      { id: 'modpanel', label: 'Mod Panel', icon: 'users' },
     ],
   },
   {
@@ -55,7 +56,7 @@ export const NAV = [
   },
 ];
 const ALL = NAV.flatMap((g) => g.items);
-const BOT_PAGES = new Set(['commands', 'timers', 'moderation', 'loyalty', 'games', 'giveaways', 'polls', 'quotes', 'achievements', 'ai', 'alerts', 'shop', 'hype', 'analytics', 'logs']);
+const BOT_PAGES = new Set(['commands', 'timers', 'moderation', 'loyalty', 'games', 'giveaways', 'polls', 'quotes', 'achievements', 'ai', 'modpanel', 'alerts', 'shop', 'hype', 'analytics', 'logs']);
 
 function TitleBar({ page, twitch, update }) {
   const [max, setMax] = useState(false);

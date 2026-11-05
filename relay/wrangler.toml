@@ -11,3 +11,12 @@ TWITCH_CLIENT_ID = "ozc63b300yxoa4w6vwygci39njppml"
 BOT_LOGIN = "steezzzbot"
 # Comma-separated Twitch user IDs of channels that may not use SteezBot (abuse kill switch).
 BLOCKED_CHANNELS = ""
+
+# Mod panel: one Durable Object per channel holds that streamer's live Steez connection.
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "ChannelHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChannelHub"]

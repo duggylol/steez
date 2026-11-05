@@ -1,9 +1,10 @@
 // TikTok Gifts: watches the streamer's TikTok LIVE for gifts — top gifters by diamonds, the
-// biggest gift combo (and the one being tapped right now) — plus the OBS gifts overlay editor.
+// biggest gift combo (and the one being tapped right now) — plus the OBS gifts overlay editor,
+// and two small badges for the daily gaming rank and Gift Gallery progress.
 import { useEffect, useState } from 'react';
 import { PageHeader, Panel, Button, Toggle, Tabs, Pill, Stat, Empty, Icon, toast } from '../../ui.jsx';
-import { useQU, startQU, editStyle, resetStyle, editSettings, fmtNum } from './store.js';
-import { Avatar, OverlayPreview, SliderCtl, ColorCtl, SwitchCtl, TextCtl, SelectCtl, SegCtl, FONT_OPTIONS, useConfirm } from './parts.jsx';
+import { useQU, startQU, editStyle, resetStyle, editSettings, fmtNum, editStats, resetStatsStyle, resetStats } from './store.js';
+import { Avatar, OverlayPreview, Ctl, SliderCtl, ColorCtl, SwitchCtl, TextCtl, SelectCtl, SegCtl, FONT_OPTIONS, useConfirm } from './parts.jsx';
 import './queue.css';
 
 let lastTab = 'session';
@@ -43,6 +44,7 @@ export default function GiftsView() {
         tabs={[
           { id: 'session', label: 'Session' },
           { id: 'overlay', label: 'Overlay' },
+          { id: 'stats', label: 'Ranking & Gallery' },
         ]}
         value={tab}
         onChange={(t) => {
@@ -50,7 +52,7 @@ export default function GiftsView() {
           setTab(t);
         }}
       />
-      {tab === 'session' ? <SessionTab /> : <GiftsOverlayTab />}
+      {tab === 'session' ? <SessionTab /> : tab === 'overlay' ? <GiftsOverlayTab /> : <StatsTab confirm={confirm} />}
       {dialog}
     </>
   );
@@ -72,9 +74,22 @@ function SessionTab() {
             <Stat value={fmtNum(gifts?.gifterCount)} label="Gifters" />
           </div>
         </Panel>
+        <RankGalleryTiles />
       </div>
       <Leaderboard />
     </div>
+  );
+}
+
+function RankGalleryTiles() {
+  const d = useQU((s) => s.tiktokStats?.display);
+  return (
+    <Panel title="Ranking & Gallery">
+      <div className="row nowrap qu-stats">
+        <Stat value={d?.rank.text ?? '—'} label="Daily gaming rank" />
+        <Stat value={d?.gallery.text ?? '—'} label="Gift Gallery" />
+      </div>
+    </Panel>
   );
 }
 
@@ -271,5 +286,221 @@ function GiftsOverlayTab() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ═══════════════════════════ Ranking & Gallery ═══════════════════════════ */
+
+const SOURCE = {
+  live: { tone: 'good', text: 'Live from TikTok' },
+  gifts: { tone: 'warn', text: 'Counted from gifts' },
+  manual: { tone: '', text: 'Manual' },
+  none: { tone: '', text: 'No data yet' },
+};
+
+function fmtWhen(ts) {
+  if (!ts) return '';
+  const d = new Date(ts < 1e12 ? ts * 1000 : ts);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+}
+
+const fmtScore = (v) => (/^\d+$/.test(String(v)) ? fmtNum(v) : String(v));
+
+function StatsTab({ confirm }) {
+  const ts = useQU((s) => s.tiktokStats);
+  const paths = useQU((s) => s.overlayPaths);
+  if (!ts || !ts.display) return <div className="faint">Loading…</div>;
+
+  const reset = async () => {
+    const ok = await confirm({
+      title: 'Reset rank and gallery?',
+      message: 'Forgets the rank, the latest notice and the Gift Gallery progress TikTok last sent. Manual values and the badge style stay.',
+      confirmLabel: 'Reset',
+      danger: true,
+    });
+    if (!ok) return;
+    await resetStats();
+    toast('Rank and gallery reset');
+  };
+
+  // The badge is 244px wide plus 8px of padding each side, scaled from the top left.
+  const scale = Number(ts.style.scale) || 1;
+  const obsW = Math.round(244 * scale + 16);
+  const obsH = Math.round(94 * scale + 16);
+
+  return (
+    <div className="qu-editor">
+      <div className="qu-controls">
+        <RankPanel ts={ts} onReset={reset} />
+        <GalleryPanel ts={ts} onReset={reset} />
+        <StatsStylePanel style={ts.style} />
+      </div>
+      <div className="qu-preview-col">
+        <OverlayPreview title="Rank badge" path={paths.tiktokRank} width={obsW} height={obsH} stageHeight={150} />
+        <OverlayPreview title="Gallery badge" path={paths.tiktokGallery} width={obsW} height={obsH} stageHeight={150} />
+      </div>
+    </div>
+  );
+}
+
+function ResetButton({ onClick }) {
+  return (
+    <Button size="sm" variant="ghost" icon="refresh" onClick={onClick} title="Forget the rank and gallery values TikTok last sent">
+      Reset
+    </Button>
+  );
+}
+
+function RankPanel({ ts, onReset }) {
+  const d = ts.display.rank;
+  const r = ts.rank;
+  const m = ts.manual;
+  const src = SOURCE[d.source] || SOURCE.none;
+  const meta = m.rankEnabled
+    ? r.updatedAt
+      ? `TikTok last sent ${r.value ? '#' + r.value : 'unranked'} at ${fmtWhen(r.updatedAt)}`
+      : 'Nothing from TikTok yet'
+    : r.updatedAt
+      ? `Updated ${fmtWhen(r.updatedAt)}${d.score ? ` · score ${fmtScore(d.score)}` : ''}`
+      : 'Waiting for TikTok to send your daily gaming rank';
+  return (
+    <Panel title="Daily gaming rank" actions={<ResetButton onClick={onReset} />}>
+      <div className="qu-readout">
+        {/* Keyed on the value so each change replays the bump. */}
+        <b key={d.text} className={d.ranked ? '' : 'dim'}>
+          {d.text}
+        </b>
+        <div className="qu-main">
+          <span>
+            <Pill tone={src.tone}>{src.text}</Pill>
+          </span>
+          <span className="qu-meta">{meta}</span>
+        </div>
+      </div>
+      {r.notice && (
+        <div className="qu-notice">
+          <span className="qu-meta">Latest rank notice{r.noticeAt ? ` · ${fmtWhen(r.noticeAt)}` : ''}</span>
+          <div>{r.notice}</div>
+        </div>
+      )}
+      <div className="divider" />
+      <SwitchCtl label="Set rank manually" value={m.rankEnabled} onChange={(v) => editStats('manual', { rankEnabled: v })} />
+      {m.rankEnabled && (
+        <Ctl label="Rank">
+          <div className="row nowrap qu-rank-in">
+            <span className="qu-at-sign">#</span>
+            <input
+              type="text"
+              value={m.rankValue ?? ''}
+              placeholder="12 or 99+"
+              maxLength={7}
+              spellCheck={false}
+              onChange={(e) => editStats('manual', { rankValue: e.target.value.replace(/[^\d+]/g, '') })}
+            />
+          </div>
+        </Ctl>
+      )}
+      <div className="help">TikTok moves you up the daily gaming list as gifts come in. In manual mode, leave the rank empty to show “{ts.style.unrankedText || 'Unranked'}”.</div>
+    </Panel>
+  );
+}
+
+function GalleryPanel({ ts, onReset }) {
+  const d = ts.display.gallery;
+  const g = ts.gallery;
+  const m = ts.manual;
+  const src = SOURCE[d.source] || SOURCE.none;
+  const meta =
+    d.source === 'manual'
+      ? g.updatedAt
+        ? `TikTok last sent ${g.collected}/${g.total} at ${fmtWhen(g.updatedAt)}`
+        : 'Nothing from TikTok yet'
+      : d.source === 'live'
+        ? `Updated ${fmtWhen(g.updatedAt)}${g.endsAt ? ` · period ends ${fmtWhen(Number(g.endsAt))}` : ''}`
+        : d.source === 'gifts'
+          ? 'Gallery gifts received this session. The total appears once TikTok sends the gallery.'
+          : 'Waiting for TikTok to send your Gift Gallery';
+
+  const total = Number(m.galleryTotal) || 0;
+  const collected = Number(m.galleryCollected) || 0;
+  const step = (n) => {
+    const next = Math.max(0, total > 0 ? Math.min(total, collected + n) : collected + n);
+    if (next !== collected) editStats('manual', { galleryCollected: next });
+  };
+
+  return (
+    <Panel title="Gift Gallery" actions={<ResetButton onClick={onReset} />}>
+      <div className="qu-readout">
+        <b key={d.collected} className={d.source === 'none' ? 'dim' : ''}>
+          {d.text}
+        </b>
+        <div className="qu-main">
+          <span>
+            <Pill tone={src.tone}>{src.text}</Pill>
+          </span>
+          <span className="qu-meta">{meta}</span>
+        </div>
+      </div>
+      {d.total > 0 && (
+        <div className="qu-meter">
+          <i style={{ width: `${Math.round(d.ratio * 100)}%` }} />
+        </div>
+      )}
+      <div className="divider" />
+      <SwitchCtl label="Set progress manually" value={m.galleryEnabled} onChange={(v) => editStats('manual', { galleryEnabled: v })} />
+      {m.galleryEnabled && (
+        <>
+          <Ctl label="Collected">
+            <div className="row nowrap qu-stepper">
+              <Button className="icon" title="One fewer" disabled={collected <= 0} onClick={() => step(-1)}>
+                −
+              </Button>
+              <b>{collected}</b>
+              <Button className="icon" title="One more" disabled={total > 0 && collected >= total} onClick={() => step(1)}>
+                +
+              </Button>
+            </div>
+          </Ctl>
+          <Ctl label="Gallery size">
+            <input
+              type="number"
+              min={0}
+              max={999}
+              value={total}
+              onChange={(e) => editStats('manual', { galleryTotal: Math.max(0, Math.min(999, parseInt(e.target.value, 10) || 0)) })}
+            />
+          </Ctl>
+        </>
+      )}
+      <div className="help">Gallery gifts light up when a viewer sends them. Manual mode is handy before TikTok has sent the gallery.</div>
+    </Panel>
+  );
+}
+
+function StatsStylePanel({ style }) {
+  const set = (key) => (value) => editStats('style', { [key]: value });
+  return (
+    <Panel
+      title="Badge style"
+      actions={
+        <Button size="sm" variant="ghost" onClick={() => resetStatsStyle().then(() => toast('Badge style reset'))}>
+          Reset style
+        </Button>
+      }
+    >
+      <SwitchCtl label="Show label" value={style.showLabel} onChange={set('showLabel')} />
+      <TextCtl label="Rank label" value={style.rankLabel} maxLength={24} onChange={set('rankLabel')} />
+      <TextCtl label="Gallery label" value={style.galleryLabel} maxLength={24} onChange={set('galleryLabel')} />
+      <TextCtl label="Not ranked text" value={style.unrankedText} maxLength={16} onChange={set('unrankedText')} />
+      <SwitchCtl label="Show rank score" value={style.showScore} onChange={set('showScore')} />
+      <SwitchCtl label="Gallery progress bar" value={style.showBar} onChange={set('showBar')} />
+      <ColorCtl label="Accent" value={style.accent} onChange={set('accent')} />
+      <ColorCtl label="Text" value={style.textColor} onChange={set('textColor')} />
+      <ColorCtl label="Background" value={style.bg} onChange={set('bg')} />
+      <SliderCtl label="Background opacity" value={style.bgOpacity} min={0} max={1} step={0.02} onChange={set('bgOpacity')} />
+      <SliderCtl label="Scale" value={style.scale} min={0.6} max={2.5} step={0.05} unit="x" onChange={set('scale')} />
+      <div className="help">Applies to both badges. OBS size at 1x: 260 × 110.</div>
+    </Panel>
   );
 }

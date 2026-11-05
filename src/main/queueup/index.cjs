@@ -11,14 +11,16 @@ const { Store, formatQueueMessage, importLegacyState, writeJsonAtomic } = requir
 const { createGiftTracker } = require('./gifts.cjs');
 const { TikTokLive } = require('./tiktok.cjs');
 const { createAvatarService } = require('./avatars.cjs');
+const { createTiktokStats, createSampleLogger } = require('./tiktokStats.cjs');
 const { mountOverlays } = require('./server.cjs');
 
 const STATE_FILE = 'queueup-state.json';
 const AVATARS_FILE = 'queueup-avatars.json';
+const RANK_SAMPLES_FILE = 'tiktok-rank-samples.log';
 const LIST_COOLDOWN_MS = 8000; // one !queue post every 8s at most, so it can't flood chat
 const LOG_LIMIT = 300;
 
-const OVERLAY_PATHS = { queue: '/overlay/queue', gifts: '/overlay/gifts' };
+const OVERLAY_PATHS = { queue: '/overlay/queue', gifts: '/overlay/gifts', tiktokRank: '/overlay/tiktok-rank', tiktokGallery: '/overlay/tiktok-gallery' };
 
 /**
  * One-time import from the standalone QueueUp app: queue, party, rules and both overlay
@@ -107,11 +109,48 @@ async function init(ctx) {
   });
   gifts.load(store.data.gifts);
 
+  // Daily gaming rank + Gift Gallery. Last-known values persist so the badges show
+  // something sensible straight after a restart.
+  const stats = createTiktokStats({
+    onChange: (reason) => {
+      send('qu:tiktokStats', { tiktokStats: stats.snapshot(), reason });
+      if (overlays) overlays.pushStats(reason);
+      store.saveTiktokStats(stats.serialize());
+    },
+  });
+  stats.load(store.data.tiktokStats);
+
+  // These payloads haven't been seen live yet: keep the first few of each per LIVE.
+  const samples = createSampleLogger({
+    file: path.join(ctx.userData, RANK_SAMPLES_FILE),
+    onError: (err) => ctx.log.warn('rank sample log failed: ' + err.message),
+  });
+  let sampledRoom = null;
+
   const tiktok = new TikTokLive();
-  tiktok.on('gift', (g) => gifts.handleGift(g));
+  tiktok.on('gift', (g) => {
+    gifts.handleGift(g);
+    stats.handleGift(g);
+  });
+  const statsEvent = (name, fn) =>
+    tiktok.on(name, (d) => {
+      samples.log(name, d);
+      try {
+        fn(d);
+      } catch (err) {
+        ctx.log.warn(`TikTok ${name} not understood: ${err.message}`);
+      }
+    });
+  statsEvent('rankUpdate', (d) => stats.handleRankUpdate(d));
+  statsEvent('gameRankNotify', (d) => stats.handleGameRankNotify(d));
+  statsEvent('giftPanelUpdate', (d) => stats.handleGiftPanel(d));
   tiktok.on('status', (st) => {
     send('qu:tiktok', st);
     if (overlays) overlays.pushGifts('tiktok');
+    if (st.status === 'live' && st.roomId !== sampledRoom) {
+      sampledRoom = st.roomId;
+      samples.reset();
+    }
   });
   tiktok.on('viewers', () => send('qu:tiktok', tiktok.state));
   tiktok.on('log', pushLog);
@@ -123,6 +162,7 @@ async function init(ctx) {
     addUpgrade: (p, wss) => ctx.server.addUpgrade(p, wss),
     store,
     getGifts: () => ({ ...gifts.snapshot(), tiktok: tiktok.state }),
+    getStats: () => stats.snapshot(),
     onLog: pushLog,
   });
   ctx.overlays.register({
@@ -140,6 +180,22 @@ async function init(ctx) {
     description: 'Top TikTok gifter and biggest gift streak, with live combos.',
     width: 444,
     height: 440,
+  });
+  ctx.overlays.register({
+    id: 'tiktok-rank',
+    name: 'TikTok gaming rank',
+    path: OVERLAY_PATHS.tiktokRank,
+    description: "Compact badge with today's TikTok LIVE gaming rank.",
+    width: 260,
+    height: 110,
+  });
+  ctx.overlays.register({
+    id: 'tiktok-gallery',
+    name: 'TikTok Gift Gallery',
+    path: OVERLAY_PATHS.tiktokGallery,
+    description: 'Compact badge with Gift Gallery progress, e.g. 3/25.',
+    width: 260,
+    height: 110,
   });
 
   store.on('change', (reason) => {
@@ -254,6 +310,7 @@ async function init(ctx) {
       ...store.snapshot(),
       tiktok: tiktok.state,
       gifts: gifts.snapshot(),
+      tiktokStats: stats.snapshot(),
       twitch,
       overlayClients: overlays.clientCount,
       overlayPaths: OVERLAY_PATHS,
@@ -288,6 +345,19 @@ async function init(ctx) {
   });
   handle('qu:queue:fill', () => store.fillParty());
   handle('qu:queue:next', () => store.nextGame());
+
+  // Remote control for the Steez Mod Panel (runs through the bot's action registry).
+  const botActions = ctx.twitch.bot;
+  if (botActions?.action) {
+    const lite = (e) => ({ id: e.id, login: e.login, display: e.display || e.name || e.login, isSub: !!e.isSub });
+    botActions.action('queueup:state', () => {
+      const s = store.snapshot();
+      return { open: s.settings.queueOpen !== false, party: (s.party || []).map(lite), queue: (s.queue || []).map(lite), partySize: s.settings.partySize };
+    });
+    botActions.action('queueup:next', () => store.nextGame());
+    botActions.action('queueup:remove', ({ id } = {}) => store.removeById(id));
+    botActions.action('queueup:open', ({ open } = {}) => store.updateSettings({ queueOpen: !!open }));
+  }
 
   handle('qu:settings:update', (patch) => {
     const clean = { ...(patch || {}) };
@@ -333,6 +403,23 @@ async function init(ctx) {
     return { ok: true };
   });
 
+  handle('qu:tiktokStats:manual', (patch) => {
+    stats.setManual(patch || {});
+    return stats.snapshot();
+  });
+  handle('qu:tiktokStats:style', (patch) => {
+    stats.setStyle(patch || {});
+    return stats.snapshot();
+  });
+  handle('qu:tiktokStats:resetStyle', () => {
+    stats.resetStyle();
+    return stats.snapshot();
+  });
+  handle('qu:tiktokStats:reset', () => {
+    stats.reset();
+    return stats.snapshot();
+  });
+
   handle('qu:util:copy', (text) => {
     ctx.clipboard.writeText(String(text || ''));
     return true;
@@ -374,6 +461,7 @@ async function init(ctx) {
     clearTimeout(avatarTimer);
     if (stopDemo) stopDemo();
     store.saveGifts(gifts.serialize());
+    store.saveTiktokStats(stats.serialize());
     tiktok.stop(true);
     store.flush();
     overlays.close();
@@ -383,7 +471,7 @@ async function init(ctx) {
   ctx.onQuit(shutdown);
 
   // Returned for tests; Steez itself only awaits init().
-  return { store, gifts, tiktok, avatars, overlays, logs, fullState, handleChatMessage, shutdown };
+  return { store, gifts, stats, tiktok, avatars, overlays, logs, fullState, handleChatMessage, shutdown };
 }
 
 /**

@@ -61,6 +61,7 @@ function normalizeGift(d) {
     giftType,
     repeatCount: Math.max(1, Number(d.repeatCount) || 1),
     repeatEnd: !!(d.repeatEnd && Number(d.repeatEnd) !== 0),
+    isGalleryGift: !!(g.isGalleryGift || d.isGalleryGift),
     at: Date.now()
   };
 }
@@ -134,14 +135,19 @@ class TikTokLive extends EventEmitter {
   }
 
   eventNames() {
-    if (this.factory) return { GIFT: 'gift', ROOM_USER: 'roomUser', STREAM_END: 'streamEnd', DISCONNECTED: 'disconnected', ERROR: 'error' };
+    const stats = { RANK_UPDATE: 'rankUpdate', GAME_RANK_NOTIFY: 'gameRankNotify', GIFT_PANEL_UPDATE: 'giftPanelUpdate' };
+    if (this.factory) return { GIFT: 'gift', ROOM_USER: 'roomUser', STREAM_END: 'streamEnd', DISCONNECTED: 'disconnected', ERROR: 'error', ...stats };
     const { WebcastEvent, ControlEvent } = this._lib;
     return {
       GIFT: WebcastEvent.GIFT,
       ROOM_USER: WebcastEvent.ROOM_USER,
       STREAM_END: WebcastEvent.STREAM_END,
       DISCONNECTED: ControlEvent.DISCONNECTED,
-      ERROR: ControlEvent.ERROR
+      ERROR: ControlEvent.ERROR,
+      // Daily gaming rank and Gift Gallery progress (see tiktokStats.cjs).
+      RANK_UPDATE: WebcastEvent.RANK_UPDATE || stats.RANK_UPDATE,
+      GAME_RANK_NOTIFY: WebcastEvent.GAME_RANK_NOTIFY || stats.GAME_RANK_NOTIFY,
+      GIFT_PANEL_UPDATE: WebcastEvent.GIFT_PANEL_UPDATE || stats.GIFT_PANEL_UPDATE
     };
   }
 
@@ -214,6 +220,10 @@ class TikTokLive extends EventEmitter {
       const gift = normalizeGift(d);
       if (gift) this.emit('gift', gift);
     });
+    // Raw payloads, passed through untouched: parsing lives in tiktokStats.cjs.
+    conn.on(ev.RANK_UPDATE, d => this.emit('rankUpdate', d));
+    conn.on(ev.GAME_RANK_NOTIFY, d => this.emit('gameRankNotify', d));
+    conn.on(ev.GIFT_PANEL_UPDATE, d => this.emit('giftPanelUpdate', d));
     conn.on(ev.ROOM_USER, d => {
       const n = Number(d && d.viewerCount);
       if (Number.isFinite(n)) { this.viewers = n; this.emit('viewers', n); }

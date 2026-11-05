@@ -209,6 +209,8 @@ async function startCore() {
   config.publicUrl = `http://127.0.0.1:${port}`;
   log.info(`Local server on http://127.0.0.1:${port}`);
   connectBot();
+  const { startModPanel } = await import('./modPanel.js');
+  startModPanel({ send, version: app.getVersion() });
   void bot;
 }
 

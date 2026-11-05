@@ -70,6 +70,7 @@ global.fetch = async (url) => {
 
 const { Store, formatQueueMessage, DEFAULT_SETTINGS } = require('./state.cjs');
 const { createGiftTracker } = require('./gifts.cjs');
+const ts = require('./tiktokStats.cjs');
 const queueup = require('./index.cjs');
 
 const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `steez-queueup-${name}-`));
@@ -271,6 +272,144 @@ test('gift tracker: combos count once, top streak is the longest, top gifter by 
 });
 
 /* ------------------------------------------------------------------ */
+/* tiktok daily gaming rank + Gift Gallery parsing                     */
+/* ------------------------------------------------------------------ */
+
+const txt = (defaultPattern, ...strings) => ({ key: 'k', defaultPattern, pieces: strings.map((stringValue) => ({ type: 1, stringValue })) });
+
+test('rank parsing: daily game rank by numeric or string enum, unranked, 99+', () => {
+  assert.equal(ts.rankTypeNum(11), 11);
+  assert.equal(ts.rankTypeNum('TYPE_DAILY_GAME'), 11);
+  assert.equal(ts.rankTypeNum('11'), 11);
+  assert.equal(ts.rankTypeNum('DAILY_GAME'), 11);
+  assert.equal(ts.rankTypeNum('nonsense'), null);
+
+  // Numeric enums: picks type 11 even when other ranks come first.
+  const numeric = {
+    updates: [
+      { rankType: 0, ownRank: '3', currentScore: '10' },
+      { rankType: 11, ownRank: '12', currentScore: '4520', defaultContent: txt('Daily gaming') },
+      { rankType: 10, ownRank: '40', currentScore: '1' },
+    ],
+  };
+  assert.deepEqual(ts.parseRankUpdate(numeric), { value: '12', score: '4520', type: 11, content: 'Daily gaming' });
+
+  // String enums, and the fallback to the gaming rank (10) when there is no daily one.
+  const named = { updates: [{ rankType: 'TYPE_HOURLY_RANK', ownRank: '1' }, { rankType: 'TYPE_GAME_RANK', ownRank: '099', currentScore: '0' }] };
+  assert.deepEqual(ts.parseRankUpdate(named), { value: '99', score: '', type: 10, content: '' });
+  assert.equal(ts.parseRankUpdate({ updates: [{ rankType: 'TYPE_DAILY_GAME', ownRank: '99+' }] }).value, '99+');
+
+  // Unranked: "0", "" and "-1" all mean "not on the list".
+  for (const ownRank of ['0', '', '-1', undefined]) assert.equal(ts.parseRankUpdate({ updates: [{ rankType: 11, ownRank }] }).value, '', `ownRank ${ownRank}`);
+  // ...unless the text says it.
+  assert.equal(ts.parseRankUpdate({ updates: [{ rankType: 11, ownRank: '', defaultContent: txt("You're {0:string} in Gaming", '#7') }] }).value, '7');
+  // No gaming rank in the message at all -> nothing to apply.
+  assert.equal(ts.parseRankUpdate({ updates: [{ rankType: 8, ownRank: '5' }] }), null);
+  assert.equal(ts.parseRankUpdate({}), null);
+  assert.equal(ts.parseRankUpdate(null), null);
+});
+
+test('rank notices: readable text from the Text pattern, rank pulled out when present', () => {
+  const user = { type: 11, userValue: { user: { nickname: 'Streamer' } } };
+  const n = ts.parseGameRankNotify({ msgType: 1, notifyText: { defaultPattern: '{0:user} moved up to No. {1:string} in Gaming', pieces: [user, { stringValue: '15' }] } });
+  assert.deepEqual(n, { notice: 'Streamer moved up to No. 15 in Gaming', msgType: 1, value: '15' });
+  assert.equal(ts.parseGameRankNotify({ msgType: 'MSG_TYPE_ANCHOR_ENCOURAGE', notifyText: txt('Keep going!') }).msgType, 2);
+  assert.equal(ts.parseGameRankNotify({ msgType: 0, notifyText: txt('Keep going!') }).value, '');
+  assert.equal(ts.textToString({ pieces: [{ stringValue: 'Ranked' }, { stringValue: '#3' }] }), 'Ranked #3');
+  assert.equal(ts.parseGameRankNotify({ msgType: 0 }), null);
+  assert.equal(ts.rankFromText('You are 4th today'), '4');
+  assert.equal(ts.rankFromText('Top 100'), '');
+});
+
+test('gallery parsing: total entries, collected = sponsored entries', () => {
+  const progress = {
+    5655: { goalCount: '1', currentSponsorId: '7034000000000000001' },
+    5487: { goalCount: '1', currentSponsorId: '0' },
+    6096: { goalCount: '1', currentSponsorId: '' },
+    7122: { goalCount: '1', currentSponsorId: '7034000000000000002' },
+    8000: { goalCount: '1' },
+  };
+  assert.deepEqual(ts.parseGalleryPanel({ galleryData: { progress, period: '7', endTimeInMs: '1767225600000' } }), {
+    collected: 2,
+    total: 5,
+    period: '7',
+    endsAt: 1767225600000,
+  });
+  const entries = [{ key: '1', value: { currentSponsorId: '9' } }, { key: '2', value: { currentSponsorId: '0' } }];
+  assert.equal(ts.parseGalleryPanel({ galleryData: { progress: entries } }).collected, 1);
+  assert.equal(ts.parseGalleryPanel({ galleryData: { progress: {} } }), null);
+  assert.equal(ts.parseGalleryPanel({ goalData: {} }), null);
+});
+
+test('stats tracker: manual values win, notices fill in, gallery gifts as a fallback, reset', () => {
+  let changes = 0;
+  const s = ts.createTiktokStats({ onChange: () => changes++ });
+  let d = s.snapshot().display;
+  assert.equal(d.rank.text, '—');
+  assert.equal(d.gallery.text, '—');
+
+  // Before any panel data, distinct gallery gifts count up.
+  s.handleGift({ giftId: '5655', isGalleryGift: true });
+  s.handleGift({ giftId: '5655', isGalleryGift: true });
+  s.handleGift({ giftId: '1', isGalleryGift: false });
+  d = s.snapshot().display;
+  assert.deepEqual([d.gallery.source, d.gallery.text], ['gifts', '1']);
+
+  s.handleGiftPanel({ galleryData: { progress: { a: { currentSponsorId: '9' }, b: { currentSponsorId: '9' }, c: { currentSponsorId: '0' } } } });
+  d = s.snapshot().display;
+  assert.deepEqual([d.gallery.source, d.gallery.text, d.gallery.collected, d.gallery.total], ['live', '2/3', 2, 3]);
+
+  // A notice sets the rank only while no rankUpdate has.
+  s.handleGameRankNotify({ msgType: 0, notifyText: txt('You entered the daily gaming list at #50') });
+  assert.equal(s.snapshot().display.rank.text, '#50');
+  s.handleRankUpdate({ updates: [{ rankType: 11, ownRank: '12', currentScore: '900' }] });
+  s.handleGameRankNotify({ msgType: 1, notifyText: txt('Up to #8 soon?') });
+  const snap = s.snapshot();
+  assert.equal(snap.display.rank.text, '#12', 'rankUpdate beats a notice');
+  assert.equal(snap.rank.notice, 'Up to #8 soon?');
+  assert.equal(snap.display.rank.score, '900');
+  s.handleRankUpdate({ updates: [{ rankType: 'TYPE_DAILY_GAME', ownRank: '0' }] });
+  assert.equal(s.snapshot().display.rank.text, 'Unranked');
+
+  // Manual override precedence.
+  s.setManual({ rankEnabled: true, rankValue: '#3', galleryEnabled: true, galleryCollected: 40, galleryTotal: 25 });
+  d = s.snapshot().display;
+  assert.deepEqual([d.rank.source, d.rank.text, d.rank.score], ['manual', '#3', '']);
+  assert.deepEqual([d.gallery.source, d.gallery.text], ['manual', '25/25'], 'collected is clamped to the total');
+  s.setManual({ rankValue: 'abc' });
+  assert.equal(s.snapshot().display.rank.text, 'Unranked');
+  s.setStyle({ unrankedText: 'Not ranked', bogus: 1 });
+  assert.equal(s.snapshot().display.rank.text, 'Not ranked');
+  assert.equal(s.snapshot().style.bogus, undefined, 'unknown style keys are dropped');
+  s.setManual({ rankEnabled: false, galleryEnabled: false });
+  assert.equal(s.snapshot().display.gallery.text, '2/3', 'live values come back when manual is off');
+
+  // Persisted and restored, then reset keeps manual + style.
+  const restored = ts.createTiktokStats();
+  restored.load(JSON.parse(JSON.stringify(s.serialize())));
+  assert.equal(restored.snapshot().display.gallery.text, '2/3');
+  restored.reset();
+  const after = restored.snapshot();
+  assert.equal(after.display.rank.text, '—');
+  assert.equal(after.display.gallery.text, '—');
+  assert.equal(after.style.unrankedText, 'Not ranked');
+  assert.ok(changes > 5);
+});
+
+test('rank samples: first five per event per session, truncated, buffers summarised', () => {
+  const lines = [];
+  const log = ts.createSampleLogger({ file: 'x.log', append: (_f, line) => lines.push(line) });
+  for (let i = 0; i < 7; i++) log.log('rankUpdate', { i, prompt: Buffer.from([1, 2, 3]) });
+  log.log('giftPanelUpdate', { big: 'x'.repeat(10000) });
+  assert.equal(lines.filter((l) => l.includes(' rankUpdate ')).length, 5);
+  assert.match(lines[0], /"<3 bytes>"/);
+  assert.ok(lines.at(-1).length < 4300, 'payload truncated to ~4KB');
+  log.reset();
+  log.log('rankUpdate', {});
+  assert.equal(lines.filter((l) => l.includes(' rankUpdate ')).length, 6, 'a new session samples again');
+});
+
+/* ------------------------------------------------------------------ */
 /* module: import, IPC, chat, avatars, tiktok, overlays                */
 /* ------------------------------------------------------------------ */
 
@@ -336,7 +475,8 @@ test('module: IPC, chat commands, avatars, tiktok and overlays', async (t) => {
       'qu:gifts:simulate', 'qu:util:copy', 'qu:util:openExternal', 'qu:util:confirm',
     ];
     assert.deepEqual(required.filter((c) => !m.handlers.has(c)), []);
-    assert.deepEqual(m.registered.map((o) => o.path), ['/overlay/queue', '/overlay/gifts']);
+    assert.deepEqual(m.registered.map((o) => o.path), ['/overlay/queue', '/overlay/gifts', '/overlay/tiktok-rank', '/overlay/tiktok-gallery']);
+    for (const c of ['qu:tiktokStats:manual', 'qu:tiktokStats:style', 'qu:tiktokStats:resetStyle', 'qu:tiktokStats:reset']) assert.ok(m.handlers.has(c), c);
   });
 
   await t.test('queue IPC drives the store and pushes qu:state', async () => {
@@ -496,6 +636,78 @@ test('module: IPC, chat commands, avatars, tiktok and overlays', async (t) => {
     await wait(50);
     assert.ok(msgs.some((x) => x.type === 'state' && x.overlay.accent === '#123456'), 'style edits push live');
     ws.close();
+  });
+
+  await t.test('tiktok rank + gallery: events, IPC, overlay pages and live pushes', async () => {
+    await m.call('qu:tiktok:connect', 'rankstreamer');
+    await wait(100);
+    const conn = tiktokConnections.at(-1);
+    conn.emit('rankUpdate', { updates: [{ rankType: 'TYPE_DAILY_GAME', ownRank: '12', currentScore: '4520', prompt: Buffer.from([1]) }] });
+    conn.emit('giftPanelUpdate', { galleryData: { progress: { 1: { currentSponsorId: '5' }, 2: { currentSponsorId: '0' }, 3: { currentSponsorId: '7' } } } });
+    conn.emit('gameRankNotify', { msgType: 1, notifyText: { defaultPattern: 'Moved up to #12', pieces: [] } });
+
+    let st = await m.call('qu:getState');
+    assert.equal(st.tiktokStats.display.rank.text, '#12');
+    assert.equal(st.tiktokStats.display.gallery.text, '2/3');
+    assert.equal(st.tiktokStats.rank.notice, 'Moved up to #12');
+    assert.ok(m.sent.some((s) => s.ch === 'qu:tiktokStats'), 'changes push to the app');
+    assert.deepEqual(st.overlayPaths.tiktokRank, '/overlay/tiktok-rank');
+
+    // Raw payloads are kept for later inspection.
+    await wait(50);
+    const samples = fs.readFileSync(path.join(userData, 'tiktok-rank-samples.log'), 'utf8');
+    assert.match(samples, / rankUpdate #1 /);
+    assert.match(samples, / giftPanelUpdate #1 /);
+    assert.match(samples, / gameRankNotify #1 /);
+
+    // Overlay pages + first-paint JSON.
+    for (const [p, label] of [['/overlay/tiktok-rank', 'data-kind="rank"'], ['/overlay/tiktok-gallery', 'data-kind="gallery"']]) {
+      const page = await get(m.port, p);
+      assert.equal(page.status, 200, p);
+      assert.ok(page.body.includes(label), p);
+      assert.match(page.body, /\/overlay\/tiktok-stats\/stats\.js/);
+      assert.equal((await get(m.port, p + '/')).status, 200, p + '/');
+      const api = JSON.parse((await get(m.port, p + '/api/state')).body);
+      assert.equal(api.tiktokStats.display.rank.text, '#12');
+      assert.equal(api.tiktokStats.display.gallery.text, '2/3');
+    }
+    assert.equal((await get(m.port, '/overlay/tiktok-stats/stats.js')).status, 200);
+    assert.equal((await get(m.port, '/overlay/tiktok-stats/stats.css')).status, 200);
+
+    // Manual values + style over IPC, pushed live to overlays.
+    const ws = new WebSocket(`ws://127.0.0.1:${m.port}/queueup-ws`);
+    const msgs = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(String(d))));
+    await new Promise((r) => ws.once('open', r));
+    await wait(50);
+    assert.ok(msgs.some((x) => x.type === 'tiktokStats' && x.tiktokStats.display.rank.text === '#12'), 'stats on connect');
+    msgs.length = 0;
+    const snap = await m.call('qu:tiktokStats:manual', { rankEnabled: true, rankValue: '3', galleryEnabled: true, galleryCollected: 4, galleryTotal: 25 });
+    assert.equal(snap.display.rank.text, '#3');
+    assert.equal(snap.display.gallery.text, '4/25');
+    await m.call('qu:tiktokStats:style', { accent: '#abcdef', rankLabel: 'DAILY' });
+    await wait(50);
+    assert.ok(msgs.some((x) => x.type === 'tiktokStats' && x.tiktokStats.display.gallery.text === '4/25'), 'manual pushes live');
+    assert.ok(msgs.some((x) => x.type === 'tiktokStats' && x.tiktokStats.style.accent === '#abcdef'), 'style pushes live');
+    ws.close();
+
+    // Persisted with the QueueUp state.
+    await wait(350);
+    const disk = JSON.parse(fs.readFileSync(path.join(userData, 'queueup-state.json'), 'utf8'));
+    assert.equal(disk.tiktokStats.rank.value, '12');
+    assert.equal(disk.tiktokStats.manual.galleryTotal, 25);
+    assert.equal(disk.tiktokStats.style.rankLabel, 'DAILY');
+
+    const styled = await m.call('qu:tiktokStats:resetStyle');
+    assert.equal(styled.style.rankLabel, 'GAMING · DAILY');
+    const cleared = await m.call('qu:tiktokStats:reset');
+    assert.equal(cleared.rank.value, '');
+    assert.equal(cleared.gallery.total, 0);
+    assert.equal(cleared.display.rank.text, '#3', 'manual survives a reset');
+    await m.call('qu:tiktokStats:manual', { rankEnabled: false, galleryEnabled: false });
+    st = await m.call('qu:getState');
+    assert.equal(st.tiktokStats.display.rank.text, '—');
+    await m.call('qu:tiktok:disconnect');
   });
 
   await t.test('gifts reset and demo session', async () => {

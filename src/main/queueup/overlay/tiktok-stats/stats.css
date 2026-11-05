@@ -1,0 +1,125 @@
+/* ============================================================
+   Steez TikTok rank + Gift Gallery badges (OBS browser sources)
+   Clean and sharp: dark translucent panel, light text, square
+   corners, 1px lines, no gradients. Colours, opacity and scale are
+   CSS variables pushed live from the app.
+   Designed for a 260 x 110 browser source at scale 1.
+   ============================================================ */
+
+:root {
+  --accent: #d4d4d4;
+  --text: #f2f2f2;
+  --bg: 18, 18, 18;      /* panel background as r,g,b */
+  --bg-opacity: 0.82;
+  --scale: 1;
+  --font: "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: transparent !important;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body { padding: 8px; }
+
+.stage {
+  width: 244px;
+  transform: scale(var(--scale));
+  transform-origin: top left;
+}
+
+.badge {
+  position: relative;
+  padding: 9px 14px 10px 17px;
+  background: rgba(var(--bg), var(--bg-opacity));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+/* A thin accent rule down the left edge. */
+.badge::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.value {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform-origin: left center;
+  margin-top: 2px;
+}
+
+/* "Unranked" / "—" sit quieter than a real number. */
+body.empty .value { font-size: 26px; line-height: 1.535; color: rgba(255, 255, 255, 0.62); }
+
+.sub {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  margin-top: 1px;
+}
+.sub:empty { display: none; }
+
+.bar {
+  height: 3px;
+  margin-top: 7px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.5s cubic-bezier(.2, .8, .2, 1);
+}
+
+body.no-label .label { display: none; }
+body.no-bar .bar { display: none; }
+
+/* Subtle bump when the number changes. */
+.value.bump { animation: bump 0.42s cubic-bezier(.2, .8, .2, 1); }
+@keyframes bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.badge.flash { animation: flash 0.6s ease-out; }
+@keyframes flash {
+  from { border-color: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .value.bump, .badge.flash { animation: none; }
+  .bar i { transition: none; }
+}

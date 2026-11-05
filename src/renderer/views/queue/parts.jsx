@@ -50,7 +50,7 @@ export function DraftInput({ value, onCommit, delay = 350, ...rest }) {
 
 /* ─── Overlay style controls: label on the left, control on the right ─── */
 
-function Ctl({ label, children, value }) {
+export function Ctl({ label, children, value }) {
   return (
     <div className="qu-ctl">
       <span className="qu-ctl-l">{label}</span>
@@ -141,13 +141,13 @@ const BACKDROPS = [
  * Live preview of an OBS browser source plus its URL. The iframe loads the very page OBS
  * loads, from the Steez server, so what you see is what the stream gets.
  */
-export function OverlayPreview({ path, width, height, onReset }) {
+export function OverlayPreview({ path, width, height, onReset, title = 'Preview', stageHeight }) {
   const base = useQU((s) => s.baseUrl);
   const [backdrop, setBackdrop] = useState('checker');
   const url = base ? base + path : '';
   return (
     <Panel
-      title="Preview"
+      title={title}
       className="qu-preview"
       actions={
         <>
@@ -167,7 +167,9 @@ export function OverlayPreview({ path, width, height, onReset }) {
         </Button>
         <Button icon="external" className="icon" title="Open in browser" disabled={!url} onClick={() => window.steez.open(url)} />
       </div>
-      <div className={`qu-stage bg-${backdrop}`}>{url && <iframe src={url} title="Overlay preview" />}</div>
+      <div className={`qu-stage bg-${backdrop}`} style={stageHeight ? { height: stageHeight } : undefined}>
+        {url && <iframe src={url} title={`${title} — overlay preview`} />}
+      </div>
       <div className="help qu-obs">
         In OBS: <b>Sources → + → Browser</b>, paste the URL, set width <b>{width}</b> and height <b>{height}</b>, and leave{' '}
         <i>Shutdown source when not visible</i> unchecked. Edits apply live — no refresh needed.

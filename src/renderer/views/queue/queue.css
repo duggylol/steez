@@ -109,3 +109,19 @@
 .qu-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
 .qu-num.strong { color: var(--text); font-weight: 600; }
 .qu-listhead.qu-gl span:nth-child(4), .qu-listhead.qu-gl span:nth-child(5) { text-align: right; }
+
+/* ─── TikTok rank + Gift Gallery ─── */
+.qu-readout { display: grid; grid-template-columns: minmax(96px, auto) minmax(0, 1fr); gap: 14px; align-items: center; }
+.qu-readout > b { font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -.01em; animation: quBump .22s ease-out; }
+.qu-readout > b.dim { font-size: 20px; font-weight: 600; color: var(--text-3); }
+.qu-readout .qu-main { gap: 5px; }
+.qu-readout .qu-main > span:first-child { display: flex; }
+.qu-notice { margin-top: 12px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; color: var(--text-2); }
+.qu-notice .qu-meta { display: block; margin-bottom: 2px; }
+.qu-meter { height: 3px; margin-top: 12px; background: var(--surface-3); }
+.qu-meter i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.qu-rank-in { gap: 4px; width: 100%; }
+.qu-rank-in input { flex: 1; min-width: 0; }
+.qu-stepper { gap: 6px; }
+.qu-stepper b { min-width: 40px; text-align: center; font-family: var(--mono); font-weight: 400; font-variant-numeric: tabular-nums; }
+.qu-ctl-c > input[type=number] { width: 90px; }

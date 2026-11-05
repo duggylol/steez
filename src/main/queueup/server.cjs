@@ -5,6 +5,9 @@
 //   /overlay/queue/api/state  first-paint JSON for it
 //   /overlay/gifts            gifts overlay (static files from ./overlay/gifts)
 //   /overlay/gifts/api/state  first-paint JSON for it
+//   /overlay/tiktok-rank      daily gaming rank badge   (page + /api/state)
+//   /overlay/tiktok-gallery   Gift Gallery badge         (page + /api/state)
+//   /overlay/tiktok-stats/*   their shared script and stylesheet
 //   /queueup-ws               live pushes to both overlays and the in-app previews
 const path = require('path');
 const express = require('express');
@@ -33,9 +36,10 @@ function publicState(store) {
  * @param {(path: string, wss: WebSocketServer) => void} opts.addUpgrade
  * @param {object} opts.store       queueup Store
  * @param {() => object|null} opts.getGifts  gift snapshot + tiktok status
+ * @param {() => object|null} [opts.getStats]  rank + gallery snapshot (tiktokStats.cjs)
  * @param {(entry: object) => void} [opts.onLog]
  */
-function mountOverlays({ router, addUpgrade, store, getGifts, onLog }) {
+function mountOverlays({ router, addUpgrade, store, getGifts, getStats, onLog }) {
   const giftState = (reason) => ({
     gifts: getGifts ? getGifts() : null,
     giftOverlay: store.data.giftOverlay,
@@ -43,9 +47,21 @@ function mountOverlays({ router, addUpgrade, store, getGifts, onLog }) {
     serverTime: Date.now(),
   });
 
+  const statsState = (reason) => ({
+    tiktokStats: getStats ? getStats() : null,
+    reason: reason || 'update',
+    serverTime: Date.now(),
+  });
+
   // JSON endpoints first so the static handlers never shadow them.
   router.get('/overlay/queue/api/state', (_req, res) => res.json(publicState(store)));
   router.get('/overlay/gifts/api/state', (_req, res) => res.json(giftState()));
+  router.get('/overlay/tiktok-rank/api/state', (_req, res) => res.json(statsState()));
+  router.get('/overlay/tiktok-gallery/api/state', (_req, res) => res.json(statsState()));
+  // Both badges are one script + stylesheet; the page only says which one it is.
+  router.get('/overlay/tiktok-rank', (_req, res) => res.sendFile(path.join(OVERLAY_DIR, 'tiktok-stats', 'rank.html')));
+  router.get('/overlay/tiktok-gallery', (_req, res) => res.sendFile(path.join(OVERLAY_DIR, 'tiktok-stats', 'gallery.html')));
+  router.use('/overlay/tiktok-stats', express.static(path.join(OVERLAY_DIR, 'tiktok-stats'), { index: false }));
   router.use('/overlay/queue', express.static(path.join(OVERLAY_DIR, 'queue'), { index: 'index.html' }));
   router.use('/overlay/gifts', express.static(path.join(OVERLAY_DIR, 'gifts'), { index: 'index.html' }));
 
@@ -64,6 +80,7 @@ function mountOverlays({ router, addUpgrade, store, getGifts, onLog }) {
     ws.on('error', () => clients.delete(ws));
     safeSend(ws, { type: 'state', ...publicState(store) });
     safeSend(ws, { type: 'gifts', ...giftState() });
+    if (getStats) safeSend(ws, { type: 'tiktokStats', ...statsState() });
   });
 
   addUpgrade(WS_PATH, wss);
@@ -107,6 +124,7 @@ function mountOverlays({ router, addUpgrade, store, getGifts, onLog }) {
   return {
     pushState: () => broadcast({ type: 'state', ...publicState(store) }),
     pushGifts: (reason) => broadcast({ type: 'gifts', ...giftState(reason) }),
+    pushStats: (reason) => broadcast({ type: 'tiktokStats', ...statsState(reason) }),
     get clientCount() {
       return clients.size;
     },

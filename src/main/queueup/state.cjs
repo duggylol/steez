@@ -141,6 +141,7 @@ class Store extends EventEmitter {
       overlay: { ...DEFAULT_OVERLAY },
       giftOverlay: { ...DEFAULT_GIFT_OVERLAY },
       gifts: null, // last saved gift session, restored by the tracker on boot
+      tiktokStats: null, // daily gaming rank + Gift Gallery (see tiktokStats.cjs)
     };
     this._saveTimer = null;
     this.load();
@@ -156,6 +157,7 @@ class Store extends EventEmitter {
         this.data.overlay = { ...DEFAULT_OVERLAY, ...(raw.overlay || {}) };
         this.data.giftOverlay = { ...DEFAULT_GIFT_OVERLAY, ...(raw.giftOverlay || {}) };
         this.data.gifts = raw.gifts && typeof raw.gifts === 'object' ? raw.gifts : null;
+        this.data.tiktokStats = raw.tiktokStats && typeof raw.tiktokStats === 'object' ? raw.tiktokStats : null;
       }
     } catch (err) {
       // Never let an unreadable file get silently overwritten by the next save -
@@ -392,6 +394,12 @@ class Store extends EventEmitter {
     this.data.giftOverlay = { ...DEFAULT_GIFT_OVERLAY };
     this.changed('giftOverlay');
     return this.data.giftOverlay;
+  }
+
+  /** Persists the rank + gallery stats without broadcasting a state change. */
+  saveTiktokStats(serialized) {
+    this.data.tiktokStats = serialized || null;
+    this.save();
   }
 
   /** Persists the gift session without broadcasting a state change. */

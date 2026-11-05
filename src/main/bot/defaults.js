@@ -186,6 +186,19 @@ export const defaultSettings = {
   },
   clips: { cooldownSeconds: 60, message: '🎬 Clip created by ${user}: ${clip}' },
   achievements: { enabled: true, announce: true, rewardPoints: 100 },
+  // What your mods may change from the web Mod Panel (<relay>/mod).
+  modPanel: {
+    enabled: true,
+    commands: true,
+    timers: true,
+    quotes: true,
+    giveaways: true,
+    polls: true,
+    songs: true,
+    queue: true,
+    points: false,
+    moderation: true,
+  },
   shoutout: {
     message: 'Go show some love to ${name}! They were last playing ${game} → https://twitch.tv/${login}',
     nativeShoutout: true,

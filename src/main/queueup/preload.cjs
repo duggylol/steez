@@ -27,6 +27,10 @@ module.exports = ({ contextBridge, ipcRenderer, listen }) => {
     giftsSimulate: call('qu:gifts:simulate'),
     updateGiftOverlay: call('qu:giftOverlay:update'),
     resetGiftOverlay: call('qu:giftOverlay:reset'),
+    statsManual: call('qu:tiktokStats:manual'),
+    statsStyle: call('qu:tiktokStats:style'),
+    statsResetStyle: call('qu:tiktokStats:resetStyle'),
+    statsReset: call('qu:tiktokStats:reset'),
 
     copy: call('qu:util:copy'),
     openExternal: call('qu:util:openExternal'),
@@ -37,5 +41,6 @@ module.exports = ({ contextBridge, ipcRenderer, listen }) => {
     onLog: listen('qu:log'),
     onTikTok: listen('qu:tiktok'),
     onGifts: listen('qu:gifts'),
+    onTiktokStats: listen('qu:tiktokStats'),
   });
 };

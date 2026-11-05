@@ -13,9 +13,10 @@ export const useQU = create(() => ({
   twitch: null,
   tiktok: { status: 'idle', username: '', detail: '', viewers: 0 },
   gifts: null,
+  tiktokStats: null, // daily gaming rank + Gift Gallery (main: tiktokStats.cjs)
   logs: [], // newest first
   baseUrl: '',
-  overlayPaths: { queue: '/overlay/queue', gifts: '/overlay/gifts' },
+  overlayPaths: { queue: '/overlay/queue', gifts: '/overlay/gifts', tiktokRank: '/overlay/tiktok-rank', tiktokGallery: '/overlay/tiktok-gallery' },
 }));
 
 const hq = () => window.hq;
@@ -26,6 +27,14 @@ const LOG_KEEP = 120;
 // slider being dragged never jumps back to an older value.
 const pending = { overlay: {}, giftOverlay: {} };
 const pendingTimers = {};
+// Same idea for the rank/gallery badges: their style and the manual values.
+const statsPending = { style: {}, manual: {} };
+const statsTimers = {};
+
+function withStatsPending(ts) {
+  if (!ts) return ts;
+  return { ...ts, style: { ...ts.style, ...statsPending.style }, manual: { ...ts.manual, ...statsPending.manual } };
+}
 
 // Called synchronously before a new party/queue lands (used to animate reordering).
 const beforeListChange = new Set();
@@ -41,6 +50,7 @@ function apply(s) {
   const next = { ...s, ready: true };
   if (s.overlay) next.overlay = { ...s.overlay, ...pending.overlay };
   if (s.giftOverlay) next.giftOverlay = { ...s.giftOverlay, ...pending.giftOverlay };
+  if (s.tiktokStats) next.tiktokStats = withStatsPending(s.tiktokStats);
   useQU.setState(next);
 }
 
@@ -58,6 +68,32 @@ export function startQU() {
   hq().onLog((item) => useQU.setState((st) => ({ logs: [item, ...st.logs].slice(0, LOG_KEEP) })));
   hq().onTikTok((tiktok) => useQU.setState({ tiktok }));
   hq().onGifts((p) => useQU.setState({ gifts: p.gifts }));
+  hq().onTiktokStats((p) => p && p.tiktokStats && useQU.setState({ tiktokStats: withStatsPending(p.tiktokStats) }));
+}
+
+/** Edits the rank/gallery badges: kind 'style' (look) or 'manual' (override values). */
+export function editStats(kind, patch) {
+  Object.assign(statsPending[kind], patch);
+  useQU.setState((st) => (st.tiktokStats ? { tiktokStats: { ...st.tiktokStats, [kind]: { ...st.tiktokStats[kind], ...patch } } } : {}));
+  clearTimeout(statsTimers[kind]);
+  statsTimers[kind] = setTimeout(() => {
+    const send = statsPending[kind];
+    statsPending[kind] = {};
+    (kind === 'style' ? hq().statsStyle : hq().statsManual)(send);
+  }, 90);
+}
+
+export async function resetStatsStyle() {
+  clearTimeout(statsTimers.style);
+  statsPending.style = {};
+  const next = await hq().statsResetStyle();
+  useQU.setState({ tiktokStats: withStatsPending(next) });
+}
+
+/** Forgets the rank and gallery values TikTok sent; manual values and the look stay. */
+export async function resetStats() {
+  const next = await hq().statsReset();
+  useQU.setState({ tiktokStats: withStatsPending(next) });
 }
 
 /** Edits the queue overlay ('overlay') or gifts overlay ('giftOverlay') style. */

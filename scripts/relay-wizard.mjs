@@ -161,22 +161,15 @@ async function deploy() {
   if (!st.accountId) throw new Error('Log in to Cloudflare first.');
   if (!st.subdomain) throw new Error('Choose your workers.dev address first.');
   if (!st.secretOk) throw new Error('Check your Twitch details first.');
-  const code = fs.readFileSync(path.join(RELAY_DIR, 'src', 'index.js'), 'utf8');
-  const compat = tomlVar('compatibility_date') || fs.readFileSync(TOML, 'utf8').match(/^compatibility_date = "(.*)"/m)?.[1] || '2026-10-01';
-  const metadata = {
-    main_module: 'index.js',
-    compatibility_date: compat,
-    bindings: [
-      { type: 'plain_text', name: 'TWITCH_CLIENT_ID', text: st.clientId },
-      { type: 'plain_text', name: 'BOT_LOGIN', text: st.botLogin },
-      { type: 'plain_text', name: 'BLOCKED_CHANNELS', text: tomlVar('BLOCKED_CHANNELS') },
-      { type: 'secret_text', name: 'TWITCH_CLIENT_SECRET', text: st.secret },
-    ],
-  };
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('index.js', new Blob([code], { type: 'application/javascript+module' }), 'index.js');
-  await cf('PUT', `/accounts/${st.accountId}/workers/scripts/${SCRIPT_NAME}`, form);
+  // wrangler bundles relay/src (several modules + the mod-panel Durable Object and its migrations).
+  setTomlVar('TWITCH_CLIENT_ID', st.clientId);
+  setTomlVar('BOT_LOGIN', st.botLogin);
+  const out = npx(['deploy'], { stdio: 'pipe' });
+  if (out.status !== 0) {
+    const lines = String(out.stderr || out.stdout).split(/\r?\n/).filter((l) => /error/i.test(l));
+    throw new Error(`Deploy failed: ${lines.slice(0, 3).join(' ').slice(0, 300) || 'see the terminal for details'}`);
+  }
+  await cf('PUT', `/accounts/${st.accountId}/workers/scripts/${SCRIPT_NAME}/secrets`, { name: 'TWITCH_CLIENT_SECRET', text: st.secret, type: 'secret_text' });
   await cf('POST', `/accounts/${st.accountId}/workers/scripts/${SCRIPT_NAME}/subdomain`, { enabled: true, previews_enabled: false });
   st.relayUrl = `https://${SCRIPT_NAME}.${st.subdomain}.workers.dev`;
   writeDeployed();

@@ -51,6 +51,11 @@ const HELP = {
   'general.replyStyle': '"mention" (@user ...) or "reply" (native Twitch reply thread).',
   'general.regulars': 'One username per line — these users get the "regular" level.',
   'general.ignoredUsers': 'Other bots to ignore (no points, no commands).',
+  'modPanel.enabled': 'Lets your mods use the web Mod Panel while Steez is open.',
+  'modPanel.points': 'Give and take loyalty points from viewers.',
+  'modPanel.moderation': 'Shield mode and the automatic moderation log.',
+  'modPanel.songs': 'Skip, pause, resume and clear song requests.',
+  'modPanel.queue': 'Next game, remove players, open or close the viewer queue.',
   'general.allowEval': '⚠️ ${eval} runs JavaScript on this PC. Only enable if you fully trust every moderator.',
   'general.resetCountersOnStream': 'Named counters (${count name}) reset to 0 when a new stream starts.',
   'loyalty.intervalMinutes': 'Points are paid to everyone in chat every N minutes while live.',
@@ -164,7 +169,7 @@ function field(obj, key, path) {
   return null;
 }
 
-function settingsForm(section, { title, keys, extra } = {}) {
+function settingsForm(section, { title, keys, extra, onSaved } = {}) {
   const data = structuredClone(S.settings[section]);
   const isArr = Array.isArray(data);
   const ks = keys || (isArr ? [] : Object.keys(data));
@@ -172,6 +177,7 @@ function settingsForm(section, { title, keys, extra } = {}) {
     const full = isArr ? data : { ...S.settings[section], ...Object.fromEntries(ks.map((k) => [k, data[k]])) };
     S.settings = await api.put('/api/settings', { [section]: full });
     toast('Saved ✓');
+    await onSaved?.();
   };
   return card(
     title || label(section),
@@ -786,6 +792,59 @@ function pageLogs(main, on) {
   main.append(card(null, box));
 }
 
+// Mod Panel — remote access for the channel's moderators
+function pageModPanel(main, on) {
+  main.append(head('Mod Panel', 'Your Twitch mods can manage the bot from their browser while Steez is open.'));
+  const st = h('div');
+  let status = null;
+  const draw = (s) => {
+    status = s || status;
+    if (!status) return;
+    const tone = status.state === 'online' ? 'good' : status.state === 'error' ? 'bad' : '';
+    const text = { online: 'Live — mods can connect', connecting: 'Connecting…', off: status.enabled ? 'Not connected' : 'Turned off', error: 'Problem' }[status.state] || status.state;
+    st.replaceChildren(
+      h('div', { class: 'row' }, h('span', { class: `pill ${tone}` }, text), status.detail ? h('span', { class: 'faint small' }, status.detail) : null),
+      status.url
+        ? h('div', { style: 'margin-top:14px' },
+            h('div', { class: 'faint small', style: 'margin-bottom:6px' }, 'Send this link to your mods. They log in with their own Twitch account — only moderators of your channel get in.'),
+            h('div', { class: 'row' }, h('code', {}, status.url), btn('Copy link', () => copy(status.url), 'sm primary'), btn('Open', () => window.steez.open(status.url), 'sm')))
+        : h('div', { class: 'faint', style: 'margin-top:10px' }, 'The mod panel needs the Steez relay, which isn’t available in this build.'),
+    );
+  };
+  api.action('modpanel:status').then(draw);
+  on.modPanel = draw;
+
+  const setup = card('One-time setup (channel owner of the Steez Twitch app only)',
+    h('p', { class: 'muted', style: 'margin-top:0' }, 'Twitch must allow the mod panel to log people in. In dev.twitch.tv → your Steez app → OAuth Redirect URLs, add:'),
+    h('div', { class: 'row' }, h('code', { id: 'mp-redirect' }, '…'), btn('Copy', () => copy(document.getElementById('mp-redirect').textContent), 'sm')),
+    h('div', { class: 'help' }, 'Only the owner of the Twitch app needs to do this once — streamers using Steez don’t.'));
+  api.action('modpanel:status').then((s) => {
+    const el = setup.querySelector('#mp-redirect');
+    if (el) el.textContent = s.url || 'Relay not configured';
+  });
+
+  const actBox = h('div');
+  const acts = [];
+  const drawActs = () =>
+    actBox.replaceChildren(acts.length
+      ? h('table', {}, h('tr', {}, ['When', 'Mod', 'What'].map((t) => h('th', {}, t))), acts.slice(0, 100).map((a) => h('tr', {}, h('td', { class: 'small faint' }, ago(a.t)), h('td', {}, h('b', {}, a.mod)), h('td', {}, a.summary))))
+      : h('div', { class: 'empty' }, 'Nothing changed by mods yet.'));
+  api.action('modpanel:activity').then((l) => {
+    acts.push(...l);
+    drawActs();
+  });
+  on.modActivity = (a) => {
+    acts.unshift(a);
+    drawActs();
+  };
+
+  main.append(
+    h('div', { class: 'grid2' },
+      h('div', {}, card('Status', st), settingsForm('modPanel', { title: 'What mods can change', onSaved: async () => draw(await api.action('modpanel:apply')) })),
+      h('div', {}, card('Mod activity', h('div', { style: 'max-height:520px;overflow:auto' }, actBox)), setup)),
+  );
+}
+
 // ─── Mounting ────────────────────────────────────────────────
 const PAGES = {
   overview: pageOverview,
@@ -805,6 +864,7 @@ const PAGES = {
   analytics: pageAnalytics,
   settings: pageSettings,
   logs: pageLogs,
+  modpanel: pageModPanel,
 };
 
 const chatBuf = buffers.chat;

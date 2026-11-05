@@ -6,6 +6,8 @@
 // Streamers prove they own the channel by sending their own Twitch token; it is validated
 // against Twitch and never stored (only a hash is cached for a few minutes).
 
+import { handleMods, ChannelHub } from './mods.js';
+
 const REDIRECT_URI = 'http://localhost:43111';
 const BOT_SCOPES = 'user:bot user:write:chat user:read:chat';
 const RATE_LIMIT = 20; // messages per channel per window (Twitch's own non-mod limit)
@@ -148,6 +150,9 @@ export async function handle(request, env) {
       return json({ ok: true, sent: d.is_sent !== false, messageId: d.message_id, dropReason: d.drop_reason?.message || null });
     }
 
+    const modResponse = await handleMods(request, env, url, { validateUser });
+    if (modResponse) return modResponse;
+
     return json({ error: 'not_found' }, 404);
   } catch (e) {
     return json({ error: 'relay_error', message: String(e?.message || e) }, e?.status === 403 ? 403 : 502);
@@ -155,6 +160,7 @@ export async function handle(request, env) {
 }
 
 export default { fetch: handle };
+export { ChannelHub };
 
 /** Test hook: clear the per-isolate caches. */
 export function _reset() {
