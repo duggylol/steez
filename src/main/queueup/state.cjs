@@ -17,9 +17,10 @@ const DEFAULT_SETTINGS = {
   allowDuplicates: false,
   subsPriority: true,
   queueOpen: true,
+  enabled: false, // the viewer queue reacts to chat only when the streamer turns it on
   botReplies: false,
   tiktokUsername: '',
-  tiktokAutoConnect: true,
+  tiktokAutoConnect: false,
 };
 
 /** Settings keys from the standalone QueueUp app that Steez never imports. */

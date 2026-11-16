@@ -40,6 +40,7 @@ const sub = createSubathon({
   donations: new Donations(),
 });
 sub.db.lan = { enabled: true, port: 0 };
+sub.db.settings.enabled = true;
 await sub.start();
 const LAN = `http://127.0.0.1:${sub.lanState().boundPort}`;
 
@@ -404,4 +405,16 @@ test('the menu overlay page is served on both doors', async () => {
   const ws = new WebSocket(APP.replace('http', 'ws').replace('/subathon', '') + '/subathon/public-ws');
   await new Promise((r) => ws.on('open', r));
   ws.close();
+});
+
+test('switching the subathon off stops everything, including the clock', async () => {
+  sub.timerAction('set', 600);
+  sub.timerAction('start');
+  await sub.setEnabled(false);
+  assert.equal(sub.isOn(), false);
+  assert.equal(sub.timerState().running, false);
+  assert.equal(sub.lanState().running, false);
+  assert.equal(sub.handleTiktokGift({ login: 'a', giftName: 'Rose', diamonds: 1, giftType: 0 }), null);
+  await sub.setEnabled(true);
+  assert.equal(sub.lanState().running, true);
 });

@@ -107,7 +107,7 @@ export function createTwitchHub() {
      */
     registerCommand(name, def) {
       const { handler, ...rest } = def;
-      bot.command(String(name).replace(/^!/, '').toLowerCase(), { ...rest, handler: (ctx, args) => handler(toMessage(ctx), args, ctx) });
+      bot.command(String(name).replace(/^!/, '').toLowerCase(), { ...rest, module: true, handler: (ctx, args) => handler(toMessage(ctx), args, ctx) });
     },
     bot,
   };

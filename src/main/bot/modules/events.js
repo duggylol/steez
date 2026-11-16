@@ -146,6 +146,7 @@ export function init(bot) {
   bot.on('eventsub:channel.channel_points_custom_reward_redemption.add', async (e) => {
     const a = { type: 'redemption', user: e.user_name, login: e.user_login, reward: e.reward.title, amount: e.reward.cost, message: e.user_input || '' };
     alert(a, { silent: true });
+    if (!db.settings.general.botEnabled) return; // channel-point replies are part of the chat bot
     const r = (db.settings.redemptions || []).find((x) => x.reward && x.reward.toLowerCase() === e.reward.title.toLowerCase());
     if (!r) return;
     const ctx = { user: { login: e.user_login, display: e.user_name, level: 'everyone' }, args: (e.user_input || '').split(/\s+/).filter(Boolean), text: e.user_input || '' };

@@ -222,6 +222,7 @@ async function init(ctx) {
 
   function handleChatMessage(msg) {
     const s = store.data.settings;
+    if (!s.enabled) return;
     const text = String(msg.text || '').trim();
     const first = normCmd(text.split(/\s+/)[0]);
     if (!first.startsWith('!')) return;
@@ -366,6 +367,32 @@ async function init(ctx) {
     botActions.action('queueup:tiktok', () => tiktok.state);
   }
 
+  if (ctx.features) {
+    ctx.features.register({
+      id: 'queue',
+      name: 'Viewer queue',
+      description: 'Viewers join your play-with-viewers queue with !join.',
+      page: 'queue',
+      group: 'Features',
+      get: () => !!store.data.settings.enabled,
+      set: (on) => store.updateSettings({ enabled: !!on }),
+    });
+    ctx.features.register({
+      id: 'tiktok',
+      name: 'TikTok LIVE',
+      description: 'Connects to your TikTok LIVE for gifts, the gift overlay, rank displays and subathon gifts.',
+      page: 'gifts',
+      group: 'Features',
+      get: () => !!store.data.settings.tiktokAutoConnect,
+      set: (on) => {
+        store.updateSettings({ tiktokAutoConnect: !!on });
+        const s = store.data.settings;
+        if (on && s.tiktokUsername) tiktok.start(s.tiktokUsername);
+        if (!on) tiktok.stop();
+      },
+    });
+  }
+
   handle('qu:settings:update', (patch) => {
     const clean = { ...(patch || {}) };
     if ('partySize' in clean) clean.partySize = Math.min(20, Math.max(1, parseInt(clean.partySize, 10) || 1));
@@ -389,12 +416,16 @@ async function init(ctx) {
   handle('qu:tiktok:connect', (username) => {
     const clean = TikTokLive.cleanUsername(username || store.data.settings.tiktokUsername);
     if (!clean) return { ok: false, reason: 'no_username' };
-    store.updateSettings({ tiktokUsername: clean });
+    // Connecting from the TikTok Gifts page is turning the TikTok feature on (and Disconnect, off).
+    store.updateSettings({ tiktokUsername: clean, tiktokAutoConnect: true });
     tiktok.start(clean);
+    if (ctx.features && ctx.features.changed) ctx.features.changed();
     return { ok: true, username: clean, state: tiktok.state };
   });
   handle('qu:tiktok:disconnect', () => {
     tiktok.stop();
+    store.updateSettings({ tiktokAutoConnect: false });
+    if (ctx.features && ctx.features.changed) ctx.features.changed();
     return tiktok.state;
   });
 

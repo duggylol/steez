@@ -89,6 +89,7 @@ async function init(ctx) {
       return s.login || s.channel || '';
     },
     keyOk: ctx.checkKey,
+    onEnabledChange: () => ctx.features && ctx.features.changed && ctx.features.changed(),
     appPath: process.execPath,
     runFixTv: (o) => runFixTv(ctx, o),
     pickImport: async () => {
@@ -99,6 +100,18 @@ async function init(ctx) {
       return r.canceled ? null : r.filePaths[0];
     },
   });
+
+  if (ctx.features) {
+    ctx.features.register({
+      id: 'subathon',
+      name: 'Subathon',
+      description: 'Countdown timer that subs, bits, donations and TikTok gifts add time to, with the TV screen and viewer page.',
+      page: 'subathon',
+      group: 'Features',
+      get: () => sub.isOn(),
+      set: (on) => sub.setEnabled(on),
+    });
+  }
 
   // One-time import from the standalone app (timer, media and prices, goals, settings, TV code, password).
   if (!sub.store.existed && !ctx.importsDone().subathon) {
@@ -202,6 +215,7 @@ async function init(ctx) {
   if (bot && bot.action) {
     bot.action('subathon:state', stateForBot);
     bot.action('subathon:timer', ({ action, minutes } = {}) => {
+      if (!sub.isOn()) throw new Error('The subathon is turned off in Steez.');
       const mins = Number(minutes) || 0;
       if (action === 'add') {
         if (!mins) throw new Error('How many minutes?');
@@ -215,6 +229,7 @@ async function init(ctx) {
       return { ok: true, timeLeft: fmtClock(t.remaining), running: t.running };
     });
     bot.action('subathon:play', ({ name } = {}) => {
+      if (!sub.isOn()) throw new Error('The subathon is turned off in Steez.');
       const m = sub.playMedia(String(name || ''));
       if (!m) throw new Error('No subathon media with that name.');
       return { ok: true, played: m.name, tvs: sub.statuses.tvs };
@@ -231,6 +246,7 @@ async function init(ctx) {
     aliases: ['timeleft', 'clock'],
     group: GROUP,
     handler: (msg) => {
+      if (!sub.isOn()) return false;
       const st = stateForBot();
       const next = st.goals.find((g) => !g.done);
       const state = st.ended ? 'The subathon is over — thank you!' : `${st.timeLeft} left on the subathon clock${st.running ? '' : ' (paused)'}`;
@@ -247,6 +263,7 @@ async function init(ctx) {
     cooldown: 2,
     group: GROUP,
     handler: (msg, args) => {
+      if (!sub.isOn()) return false;
       const mins = parseMinutes(args.join(' '));
       if (!mins) return ctx.twitch.reply(msg, 'Usage: !addtime 10m (or 1h, -15m)');
       sub.timerAction('add', mins * 60);

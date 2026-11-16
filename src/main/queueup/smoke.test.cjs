@@ -650,6 +650,10 @@ test('module: IPC, chat commands, avatars, tiktok and overlays', async (t) => {
   await t.test('chat: join, subs, duplicates, leave, closed queue, !queue', async () => {
     await m.call('qu:queue:clear', 'all');
     m.said.length = 0;
+    // the viewer queue is off until the streamer turns it on: chat is ignored
+    m.say('viewer1', '!join');
+    assert.equal((await m.call('qu:getState')).queue.length, 0, 'ignored while the feature is off');
+    await m.call('qu:settings:update', { enabled: true });
     m.say('viewer1', '!join');
     m.say('subby', '!JOIN please', { isSub: true });
     m.say('viewer1', '!join');

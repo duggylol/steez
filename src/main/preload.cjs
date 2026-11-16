@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('steez', {
     set: (patch) => ipcRenderer.invoke('steez:settings:set', patch),
   },
   overlays: () => ipcRenderer.invoke('steez:overlays'),
+  features: {
+    list: () => ipcRenderer.invoke('steez:features:list'),
+    set: (id, on) => ipcRenderer.invoke('steez:features:set', id, on),
+    onChange: listen('steez:features'),
+  },
   imports: () => ipcRenderer.invoke('steez:imports'),
   twitch: {
     status: () => ipcRenderer.invoke('steez:twitch:status'),

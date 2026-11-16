@@ -1,5 +1,6 @@
 import BotPage from './bot/BotPage.jsx';
 import { Icon } from '../ui.jsx';
+import { FeaturesPanel } from '../lib/features.jsx';
 
 const SHORTCUTS = [
   { id: 'music', icon: 'music', title: 'Song Requests', text: 'Spotify, YouTube and SoundCloud requests from chat and channel points.' },
@@ -20,6 +21,7 @@ export default function Home({ go }) {
           </button>
         ))}
       </div>
+      <FeaturesPanel go={go} />
       <BotPage id="overview" />
       <style>{`
         .home-shortcuts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 20px; }

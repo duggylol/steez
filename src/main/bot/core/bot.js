@@ -301,8 +301,9 @@ class Bot extends EventEmitter {
     }
 
     this.emit('chat', ctx);
-    if (!this.settings.general.botEnabled) return;
-    if (text.startsWith(this.prefix)) await this.runCommand(ctx);
+    // With the chat bot off, only commands of features that are switched on themselves run
+    // (song requests, the viewer queue, the subathon) — they check their own switch.
+    if (text.startsWith(this.prefix)) await this.runCommand(ctx, !this.settings.general.botEnabled);
   }
 
   findCommand(name) {
@@ -318,7 +319,7 @@ class Bot extends EventEmitter {
     return null;
   }
 
-  async runCommand(ctx) {
+  async runCommand(ctx, moduleOnly = false) {
     const body = ctx.text.slice(this.prefix.length).trim();
     if (!body) return;
     const [first, ...args] = body.split(/\s+/);
@@ -329,6 +330,7 @@ class Bot extends EventEmitter {
     if (!found) return;
     const { def } = found;
     if (def.enabled === false) return;
+    if (moduleOnly && !def.module) return;
     if (!this.hasLevel(ctx.user, def.level)) return;
 
     const bypass = this.settings.general.modsBypassCooldowns && this.hasLevel(ctx.user, 'moderator');

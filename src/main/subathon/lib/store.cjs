@@ -21,6 +21,7 @@ function defaults() {
     // so Windows doesn't ask about the firewall for people who never run a subathon).
     lan: { enabled: false, port: 3000 },
     settings: {
+      enabled: false, // Steez: the whole subathon is off until the streamer turns it on
       channel: '', // blank = the Twitch account logged into Steez
       title: 'SUBATHON',
       accent: '#a970ff',
@@ -150,8 +151,10 @@ function createDb(dataDir, log) {
     /** Replace everything with data from the standalone app (keeps Steez-only fields). */
     importFrom(data) {
       const lan = db.lan;
+      const enabled = db.settings.enabled; // importing doesn't switch the subathon on or off
       db = merge(defaults(), data);
       db.lan = merge(lan, data.lan || {});
+      db.settings.enabled = enabled;
       write();
     },
   };

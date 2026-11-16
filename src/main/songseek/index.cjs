@@ -21,6 +21,7 @@ const DEFAULTS = {
   spotifyLibraryTokens: null,
   spotifyUser: null,
   setupComplete: false, // the first-run guide shows until this is true
+  enabled: false, // song requests from chat, channel points and the AI (off until the streamer turns them on)
   rewardName: 'Song Request',
   allowSpotify: true,
   allowYoutube: true,
@@ -77,7 +78,19 @@ async function init(ctx) {
   };
   ctx.twitch.onStatus(() => send('ss:twitch:status', twitchStatus()));
   registerChatCommands(ctx, store);
+  if (ctx.features) {
+    ctx.features.register({
+      id: 'songs',
+      name: 'Song requests',
+      description: 'Viewers request songs with !sr, a channel-point reward or by asking the AI.',
+      page: 'music',
+      group: 'Features',
+      get: () => !!store.get('enabled'),
+      set: (on) => store.set('enabled', !!on),
+    });
+  }
   ctx.twitch.onRedemption((e) => {
+    if (!store.get('enabled')) return;
     const want = String(store.get('rewardName') || '').trim().toLowerCase();
     const got = String(e.reward || '').trim().toLowerCase();
     if (want && got !== want) return;
@@ -98,6 +111,7 @@ async function init(ctx) {
     // Requests go through the normal song-request pipeline (search, source rules, queue, chat announce).
     bot.action('songs:request', ({ query, user } = {}) => {
       const input = String(query || '').trim().slice(0, 300);
+      if (!store.get('enabled')) throw new Error('Song requests are turned off in Steez.');
       if (!input) throw new Error('Say which song to play.');
       send('ss:twitch:request', { user: String(user || 'AI'), input, via: 'ai' });
       return { queued: input };
@@ -293,7 +307,7 @@ function applyBundledKeys(ctx, store) {
 function registerChatCommands(ctx, store) {
   const send = ctx.send;
   const forward = (cmd) => (msg) => {
-    if (!store.get('modCommandsEnabled')) return false;
+    if (!store.get('enabled') || !store.get('modCommandsEnabled')) return false;
     send('ss:twitch:command', { cmd, user: msg.display, isMod: !!(msg.isMod || msg.isBroadcaster) });
   };
 
@@ -308,7 +322,7 @@ function registerChatCommands(ctx, store) {
     aliases: srAliases,
     group: GROUP,
     handler: (msg, args) => {
-      if (!store.get('chatCommandEnabled')) return false;
+      if (!store.get('enabled') || !store.get('chatCommandEnabled')) return false;
       send('ss:twitch:request', { user: msg.display, input: args.join(' ').trim(), via: 'chat' });
     },
   });

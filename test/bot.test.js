@@ -202,3 +202,35 @@ test('twitch fixes: shared chat, anonymous gifts, gift bombs, paid upgrades', as
   assert.deepEqual([alerts[4].type, alerts[4].tier], ['sub', 'Tier 1']);
   assert.deepEqual([alerts[5].type, alerts[5].tier], ['sub', 'Tier 2']);
 });
+
+test('features: everything switches off, and feature commands still work without the chat bot', async () => {
+  const { createFeatures, registerBotFeatures } = await import('../src/main/features.js');
+  const { save } = await import('../src/main/bot/store.js');
+  const f = createFeatures({});
+  registerBotFeatures(f, { db, save, bot });
+  let modOn = true;
+  f.register({ id: 'songs', name: 'Song requests', get: () => modOn, set: (on) => (modOn = on) });
+  await f.resetAllOff();
+  assert.ok(f.list().every((x) => !x.on), JSON.stringify(f.list().filter((x) => x.on)));
+  assert.equal(db.settings.general.botEnabled, false);
+  assert.equal(db.settings.games.gamble.enabled, false);
+  assert.equal(db.settings.events.sub.enabled, false);
+  assert.equal(db.settings.modPanel.enabled, false);
+
+  // chat bot off: custom commands are silent, a feature module's command still runs
+  db.commands.ping = { response: 'pong', level: 'everyone' };
+  let ran = 0;
+  bot.command('modcmd', { module: true, level: 'everyone', handler: () => ran++ });
+  assert.equal(await chat('viewer', '!ping'), '');
+  await chat('viewer', '!modcmd');
+  assert.equal(ran, 1);
+
+  await f.set('chatbot', true);
+  assert.equal(await chat('viewer', '!ping'), 'pong');
+  await f.set('games', true);
+  assert.equal(db.settings.games.gamble.enabled, true);
+  assert.equal(f.get('games').on, true);
+  // turn everything back on for any later tests
+  for (const x of f.list()) await f.set(x.id, true);
+  delete db.commands.ping;
+});

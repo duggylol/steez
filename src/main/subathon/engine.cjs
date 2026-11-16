@@ -638,10 +638,31 @@ function createSubathon(opts) {
   });
   donations.on('event', (ev) => processEvent(ev));
 
+  const isOn = () => D().settings.enabled === true;
   function applyConnections() {
+    if (!isOn()) {
+      // Off: no Twitch chat reading, no donation listener.
+      try {
+        twitch.disconnect();
+      } catch {
+        /* ignore */
+      }
+      donations.configure('none', '');
+      statuses.twitch = { status: 'off', detail: 'The subathon is turned off' };
+      pushStatus();
+      return;
+    }
     twitch.connect(effectiveChannel());
     const d = D().settings.donation;
     donations.configure(d.provider, d.provider === 'kofi' ? d.kofiToken : d.token);
+  }
+  async function setEnabled(on) {
+    D().settings.enabled = !!on;
+    // Off means off: the countdown stops too (Start it again when you're ready).
+    if (!on && D().timer.running) timerAction('pause');
+    store.save();
+    applyConnections();
+    await restartLan();
   }
 
   // ---------------------------------------------------------------- settings
@@ -994,6 +1015,11 @@ function createSubathon(opts) {
 
     if (keyAuth) {
       // Steez-only controls
+      r.put('/api/enabled', requireAdmin, async (req, res) => {
+        await setEnabled(!!(req.body || {}).enabled);
+        if (opts.onEnabledChange) opts.onEnabledChange();
+        res.json({ ok: true, enabled: isOn() });
+      });
       r.put('/api/lan', requireAdmin, async (req, res) => {
         const b = req.body || {};
         if (b.port != null) D().lan.port = Math.round(num(b.port, D().lan.port, 1024, 65535));
@@ -1169,7 +1195,7 @@ function createSubathon(opts) {
   }
   async function restartLan() {
     await stopLan();
-    if (D().lan.enabled) await startLan();
+    if (D().lan.enabled && isOn()) await startLan();
     if (!lan.server && tunnel.state().state !== 'off') tunnel.stop();
     pushLan();
     refreshAll();
@@ -1247,7 +1273,7 @@ function createSubathon(opts) {
     return processEvent(ev, o);
   }
   function handleTiktokGift(g) {
-    if (!g || !g.giftName) return null;
+    if (!g || !g.giftName || !isOn()) return null;
     const key = (g.login || g.name) + '|' + (g.giftId || g.giftName);
     const streak = Number(g.giftType) === 1;
     if (!streak) return tiktokGift(g);
@@ -1273,7 +1299,7 @@ function createSubathon(opts) {
   // ---------------------------------------------------------------- lifecycle
   async function start() {
     applyConnections();
-    if (D().lan.enabled) await startLan();
+    if (D().lan.enabled && isOn()) await startLan();
   }
   async function close() {
     for (const i of intervals) clearInterval(i);
@@ -1312,6 +1338,8 @@ function createSubathon(opts) {
     overlayFile: path.join(PUB, 'overlay.html'),
     handleTiktokGift,
     setTiktokStatus,
+    setEnabled,
+    isOn,
     fxFor,
     lanState,
     tunnel,

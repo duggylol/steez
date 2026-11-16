@@ -217,3 +217,9 @@ td input, td select { padding: 4px 6px; }
 /* Compact controls inside table cells */
 td .row > input:not([type=checkbox]):not([type=range]) { flex: 0 0 72px; min-width: 0; }
 td select { min-width: 118px; }
+
+/* Feature switches */
+.sidebar .item.off { color: var(--text-3); }
+.sidebar .item .off-tag { margin-left: auto; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); border: 1px solid var(--line-2); padding: 0 4px; line-height: 14px; }
+.feature-banner { margin-bottom: 16px; }
+.feature-banner.off { border-left-color: var(--warn); }

@@ -8,6 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { createStore } from './store.js';
+import { createFeatures, registerBotFeatures } from './features.js';
 import { runBootUpdate, createBackgroundUpdater, updateLog } from './updater.js';
 import { findSongSeek, findQueueUp, describeImports } from './importer.js';
 
@@ -32,6 +33,7 @@ let twitchHub = null;
 let log = console;
 const overlays = [];
 const quitHooks = [];
+let features = null; // every on/off feature switch (see features.js)
 
 const send = (channel, payload) => {
   if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(channel, payload);
@@ -116,13 +118,15 @@ async function startCore() {
 
   const { startBot, connectBot, bot } = await import('./bot/index.js');
   const { storeToken } = await import('./bot/twitch/auth.js');
-  const { db } = await import('./bot/store.js');
+  const { db, save: saveBotDb } = await import('./bot/store.js');
   const { createHub, broadcast } = await import('./bot/web/hub.js');
   const { createBotRouter } = await import('./bot/web/api.js');
   const { createServer } = await import('./server.js');
   const { createTwitchHub } = await import('./twitchHub.js');
 
   await startBot({ openUrl: (url) => shell.openExternal(url) });
+  features = createFeatures({ onChange: (list) => send('steez:features', list), log });
+  registerBotFeatures(features, { db, save: saveBotDb, bot });
 
   // Import a still-valid SongSeek Twitch login so returning users are connected immediately.
   if (!db.auth.broadcaster && !steez.get('importsDone').songseekTwitch && songseek?.data?.twitchTokens?.access_token) {
@@ -201,6 +205,7 @@ async function startCore() {
         }
       },
       overlays: { register: (o) => overlays.push({ module: name, ...o }) },
+      features: { register: (f) => features.register(f), changed: () => features.notify() },
       log: { info: (...a) => log.info(prefix, ...a), warn: (...a) => log.warn(prefix, ...a), error: (...a) => log.error(prefix, ...a) },
       onQuit: (fn) => quitHooks.push(fn),
     };
@@ -211,6 +216,15 @@ async function startCore() {
     } catch (e) {
       log.error(`${name} module failed to load: ${e.stack || e.message}`);
     }
+  }
+
+  // Nothing runs on its own: the first time this version starts (new or existing install),
+  // every feature is switched off and the streamer turns on what they want.
+  if (!steez.get('featuresResetV1')) {
+    await features.resetAllOff();
+    steez.set('featuresResetV1', Date.now());
+    steez.flush();
+    log.info('All features switched off — turn on what you want from the Dashboard.');
   }
 
   const port = await server.listen();
@@ -289,6 +303,8 @@ function registerIpc() {
     list: overlays.map((o) => (typeof o.url === 'function' ? { ...o, url: o.url() || '' } : o)),
   }));
   ipcMain.handle('steez:imports', () => describeImports(app.getPath('appData')));
+  ipcMain.handle('steez:features:list', () => (features ? features.list() : []));
+  ipcMain.handle('steez:features:set', (_e, id, on) => features.set(String(id), !!on));
   ipcMain.handle('steez:twitch:status', () => twitchHub?.status());
   ipcMain.handle('steez:twitch:login', async () => {
     await twitchHub.login();

@@ -6,6 +6,7 @@ import Home from './views/Home.jsx';
 import Settings from './views/Settings.jsx';
 import Overlays from './views/Overlays.jsx';
 import MusicEngine from './views/music/MusicEngine.jsx';
+import { FeatureBanner, useFeatures, PAGE_FEATURE, refreshFeatures } from './lib/features.jsx';
 
 const MusicView = lazy(() => import('./views/music/MusicView.jsx'));
 const QueueView = lazy(() => import('./views/queue/QueueView.jsx'));
@@ -108,6 +109,11 @@ function TitleBar({ page, twitch, update }) {
 }
 
 export default function App() {
+  const features = useFeatures();
+  const isOff = (id) => {
+    const f = features.find((x) => x.id === PAGE_FEATURE[id]);
+    return !!f && !f.on;
+  };
   const [route, setRoute] = useState(() => location.hash.slice(1) || 'home');
   const [twitch, setTwitch] = useState(null);
   const [update, setUpdate] = useState(null);
@@ -128,6 +134,11 @@ export default function App() {
       offU();
     };
   }, []);
+
+  // Settings forms on a page can flip a feature's own switch; re-read them when the page changes.
+  useEffect(() => {
+    refreshFeatures();
+  }, [route]);
 
   const go = (id) => {
     location.hash = id;
@@ -153,9 +164,10 @@ export default function App() {
             <div className="group" key={g.group}>
               <div className="group-label">{g.group}</div>
               {g.items.map((it) => (
-                <div key={it.id} className={`item ${page.id === it.id ? 'active' : ''}`} onClick={() => go(it.id)}>
+                <div key={it.id} className={`item ${page.id === it.id ? 'active' : ''} ${isOff(it.id) ? 'off' : ''}`} onClick={() => go(it.id)} title={isOff(it.id) ? 'Turned off' : undefined}>
                   <Icon name={it.icon} />
                   {it.label}
+                  {isOff(it.id) && <span className="off-tag">off</span>}
                 </div>
               ))}
             </div>
@@ -165,6 +177,7 @@ export default function App() {
         </nav>
         <main className="page" key={page.id}>
           <div className="page-inner page-fade">
+            <FeatureBanner page={page.id} />
             <Suspense fallback={<div className="faint">Loading…</div>}>{view}</Suspense>
           </div>
         </main>
