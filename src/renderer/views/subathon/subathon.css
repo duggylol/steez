@@ -1,0 +1,130 @@
+/* Subathon dashboard — Steez look: flat grey surfaces, 1px lines, square corners. */
+.smp .smp-ico { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--text-2); }
+.smp .smp-ico svg { width: 100%; height: 100%; }
+.smp .smp-k-sub, .smp .k-sub .smp-ico { color: var(--text-2); }
+.smp .smp-k-bits, .smp .k-bits .smp-ico { color: var(--text-2); }
+.smp .smp-k-gift, .smp .k-gift .smp-ico { color: var(--text-2); }
+.smp .smp-k-money, .smp .k-money .smp-ico { color: var(--text-2); }
+.smp .smp-mt { margin-top: 10px; }
+.smp-loading { padding: 14px 0; }
+
+/* Timer */
+.smp-timer { font-family: var(--mono); font-size: 64px; line-height: 1.05; letter-spacing: .02em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent-hi); margin: 4px 0 6px; }
+.smp-adj button.smp-plus { color: var(--ok); }
+
+/* Now playing */
+.smp-now { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px; margin-bottom: 12px; background: var(--bg-sunk); border: 1px solid var(--line); }
+.smp-eq { display: flex; align-items: flex-end; gap: 3px; height: 18px; }
+.smp-eq i { width: 4px; background: var(--accent); animation: smpEq .8s ease-in-out infinite alternate; }
+.smp-eq i:nth-child(2) { animation-delay: .25s; }
+.smp-eq i:nth-child(3) { animation-delay: .5s; }
+@keyframes smpEq { from { height: 4px; } to { height: 18px; } }
+
+/* Stat tiles */
+.smp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.smp-stat { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+.smp-stat .smp-ico { width: 22px; height: 22px; }
+.smp-stat.click { cursor: pointer; }
+.smp-stat.click:hover { border-color: var(--line-2); background: var(--surface-3); }
+
+/* Soundboard */
+.smp-soundboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: 360px; overflow-y: auto; }
+.smp-sb { flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; text-align: left; white-space: normal; min-width: 0; }
+.smp-sb b { max-width: 100%; font-weight: 600; }
+.smp-sb small { font-size: 11px; }
+.smp-sb.off { opacity: .5; }
+
+/* Activity feed */
+.smp-feed { max-height: 360px; overflow-y: auto; }
+.smp-fl { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); min-width: 0; }
+.smp-fl:last-child { border-bottom: 0; }
+.smp-fl .grow { min-width: 0; }
+.smp-add { color: var(--ok); white-space: nowrap; }
+.smp-test { margin-left: 8px; color: var(--warn); }
+
+/* Chat mirror */
+.smp-chat { height: 340px; }
+.smp-chat .emote { height: 22px; vertical-align: middle; margin: -3px 1px; }
+
+/* Links */
+.smp-link { margin-bottom: 6px; flex-wrap: nowrap; }
+.smp-link input { font-family: var(--mono); font-size: 12px; }
+.smp-code { font-size: 13px; letter-spacing: .2em; padding: 2px 8px; color: var(--accent-hi); }
+.smp-list { margin: 0; padding-left: 18px; color: var(--text-2); }
+.smp-list li { margin-bottom: 6px; }
+
+/* Uploads */
+.smp-drop { display: flex; align-items: center; gap: 16px; padding: 22px; margin-bottom: 14px; background: var(--surface); border: 1px dashed var(--line-2); cursor: pointer; transition: border-color .1s, background .1s; }
+.smp-drop:hover, .smp-drop.over { border-color: var(--accent); background: var(--surface-2); }
+.smp-drop .smp-drop-ico { width: 28px; height: 28px; }
+.smp-uploads:empty { display: none; }
+.smp-uploads { margin-bottom: 14px; }
+.smp-up { padding: 6px 0; flex-wrap: nowrap; }
+.smp-up-bar { width: 220px; flex: none; }
+
+/* Media cards */
+.smp-media-list { display: flex; flex-direction: column; }
+.smp-mc { display: grid; grid-template-columns: 220px 1fr; gap: 16px; overflow: visible; }
+.smp-mc.disabled { opacity: .62; }
+.smp-mc-prev { background: var(--bg-sunk); border: 1px solid var(--line); display: grid; place-items: center; min-height: 130px; overflow: hidden; }
+.smp-mc-prev img, .smp-mc-prev video { width: 100%; max-height: 200px; object-fit: contain; display: block; }
+.smp-audio { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; width: 100%; }
+.smp-audio .smp-ico { width: 30px; height: 30px; }
+.smp-audio audio { width: 100%; height: 32px; }
+.smp-mc-body { min-width: 0; }
+.smp-mc-body > .row.nowrap { margin-bottom: 12px; }
+.smp-mc-body > .row.nowrap > .smp-mc-name { flex: 1; font-weight: 600; }
+.smp-mc-body label.check { margin: 0; }
+.smp-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 12px; }
+.smp-prefixed { display: flex; }
+.smp-prefixed em { font-style: normal; font-family: var(--mono); padding: 6px 8px; background: var(--surface-3); border: 1px solid var(--line-2); border-right: 0; color: var(--text-2); }
+.smp-summary { min-height: 22px; }
+.smp-warn { color: var(--warn); font-size: 11.5px; }
+@media (max-width: 1200px) { .smp-mc { grid-template-columns: 1fr; } .smp-grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .smp-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* Goals */
+.smp-goal-fields { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; column-gap: 12px; align-items: end; }
+.smp-goal-fields label.field[hidden] { display: none; }
+.smp-goal-actions { margin-bottom: 11px; flex-wrap: nowrap; }
+.smp-goal .bar { height: 6px; }
+.smp-goal.done .bar > i { background: var(--ok); }
+.smp-goal.done { border-left: 2px solid var(--ok); }
+.smp-goal label.check { margin: 0 0 0 8px; white-space: nowrap; }
+.smp-goal-num { white-space: nowrap; }
+
+/* Test lab */
+.smp-tight { gap: 12px; }
+.smp-quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; margin-top: 4px; }
+.smp-qb { justify-content: flex-start; }
+.smp-qb em { font-style: normal; color: var(--text); }
+.smp-custom { align-items: flex-end; }
+.smp-custom > label.field { margin-bottom: 0; min-width: 110px; }
+.smp-custom > button, .smp-custom > .grow + button { margin-bottom: 0; }
+.smp-custom .grow label.field { margin-bottom: 0; }
+.smp-conn { flex-wrap: nowrap; }
+.smp-pf { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.smp-pf:last-child { border-bottom: 0; }
+
+/* Settings */
+.smp-swatches { gap: 6px; margin-bottom: 11px; align-self: flex-end; }
+.smp-swatch { padding: 0; width: 30px; height: 30px; display: flex; gap: 0; border: 1px solid var(--line-2); }
+.smp-swatch i { flex: 1; height: 100%; }
+.smp-swatch:hover { border-color: var(--accent-hi); }
+.smp-settings textarea { font-family: var(--font); font-size: 13px; }
+
+/* TikTok gift rules */
+.smp .smp-tk-rules { display: grid; gap: 6px; }
+.smp .smp-tk-row { display: grid; grid-template-columns: 34px minmax(160px, 1.4fr) 70px minmax(150px, 1.4fr) 110px auto 34px; gap: 8px; align-items: center; }
+.smp .smp-tk-row.disabled { opacity: .5; }
+.smp .smp-tk-head { align-items: end; }
+.smp .smp-tk-gift { display: grid; gap: 2px; }
+.smp .smp-gift-img { width: 30px; height: 30px; object-fit: contain; display: inline-grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); }
+.smp .smp-gift-ph .smp-ico { width: 14px; height: 14px; }
+.smp .smp-tk-tag { display: inline-flex; align-items: center; gap: 5px; }
+.smp .smp-tk-tag .smp-gift-img { width: 16px; height: 16px; border: 0; background: none; }
+.smp .smp-k-tiktok, .smp .k-tiktok .smp-ico { color: var(--text-2); }
+/* effect tiers */
+.smp table.smp-fx { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.smp table.smp-fx th { text-align: left; font-weight: 500; color: var(--text-3); font-size: 11px; padding: 0 6px 6px 0; }
+.smp table.smp-fx td { padding: 3px 6px 3px 0; }
+.smp table.smp-fx input, .smp table.smp-fx select { width: 100%; }

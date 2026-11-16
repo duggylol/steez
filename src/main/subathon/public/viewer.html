@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subathon</title>
+<meta name="description" content="Live subathon timer, goals and the wake-up menu.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/static/css/common.css">
+<link rel="stylesheet" href="/static/css/viewer.css">
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="grain"></div>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-top">
+      <span class="live-pill" id="statePill"><i></i><span id="stateTxt">LIVE</span></span>
+      <a class="btn sm twitch-btn" id="twitchLink" target="_blank" rel="noopener" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.3 3L3 6.4v13.3h4.6V22h2.6l2.4-2.3h3.7l5-4.9V3H4.3zm15.3 11l-2.9 2.8h-4.6l-2.4 2.3v-2.3H5.8V4.7h13.8V14zM16.8 8h-1.7v4.9h1.7V8zm-4.6 0h-1.7v4.9h1.7V8z"/></svg>
+        <span id="twitchName">Watch</span>
+      </a>
+    </div>
+    <h1 id="title" class="grad-text">SUBATHON</h1>
+    <p class="intro" id="intro"></p>
+    <div class="timer-wrap card">
+      <div class="timer-label" id="timerLabel">TIME LEFT ON THE CLOCK</div>
+      <div class="timer mono" id="timer">00:00:00</div>
+      <div class="timer-sub" id="timerSub">&nbsp;</div>
+      <div class="stats">
+        <div><span data-icon="sub" class="i-sub"></span><b id="sSubs">0</b><small>subs</small></div>
+        <div><span data-icon="bits" class="i-bits"></span><b id="sBits">0</b><small>bits</small></div>
+        <div id="moneyStat"><span data-icon="money" class="i-money"></span><b id="sMoney">$0</b><small>donated</small></div>
+        <div><span data-icon="clock" class="i-time"></span><b id="sTime">0m</b><small>added</small></div>
+      </div>
+    </div>
+    <div class="rules" id="rules"></div>
+  </header>
+
+  <section class="section" id="goalsSec">
+    <div class="sec-head"><h2><span data-icon="goal"></span>Goals</h2></div>
+    <div class="goals" id="goals"></div>
+  </section>
+
+  <section class="section">
+    <div class="sec-head">
+      <h2><span data-icon="bolt"></span>Wake-up menu</h2>
+      <div class="filters" id="filters">
+        <button class="on" data-f="all">All</button>
+        <button data-f="bits">Bits</button>
+        <button data-f="subs">Subs</button>
+        <button data-f="donation" id="fDon">Donations</button>
+        <button data-f="tiktok" id="fTt" hidden>TikTok</button>
+      </div>
+    </div>
+    <p class="how" id="how"></p>
+    <div class="menu" id="menu"></div>
+  </section>
+
+  <section class="section" id="recentSec">
+    <div class="sec-head"><h2><span data-icon="money"></span>Recent supporters</h2></div>
+    <div class="recent" id="recent"></div>
+  </section>
+
+  <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Preview">
+    <div class="lb-box" id="lbBox"></div>
+    <button class="lb-close" id="lbClose" aria-label="Close preview">&times;</button>
+  </div>
+
+  <footer class="foot">Updates live · <span id="connTxt">connecting…</span></footer>
+</div>
+
+<script src="/static/js/common.js"></script>
+<script src="/static/js/viewer.js"></script>
+</body>
+</html>

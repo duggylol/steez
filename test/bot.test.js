@@ -171,3 +171,34 @@ test('raid boss', async () => {
   // 8 attackers × ≥8 dmg each (unless stunned) will usually defeat a 50 HP boss
   assert.ok(true);
 });
+
+test('twitch fixes: shared chat, anonymous gifts, gift bombs, paid upgrades', async () => {
+  const { isSharedFromElsewhere } = await import('../src/main/bot/twitch/irc.js');
+  assert.equal(isSharedFromElsewhere({ 'room-id': '1', 'source-room-id': '2' }), true);
+  assert.equal(isSharedFromElsewhere({ 'room-id': '1', 'source-room-id': '1' }), false);
+  assert.equal(isSharedFromElsewhere({ 'room-id': '1' }), false);
+
+  const alerts = [];
+  const onAlert = (a) => alerts.push(a);
+  bot.on('alert', onAlert);
+  const notice = (tags, text = '') => bot.emit('irc:usernotice', { tags, text });
+  // anonymous gift bomb: the bomb alerts, its 2 gifts are silent
+  notice({ 'msg-id': 'anonsubmysterygift', login: 'ananonymousgifter', 'msg-param-mass-gift-count': '2', 'msg-param-sub-plan': '1000', 'msg-param-community-gift-id': 'c1' });
+  notice({ 'msg-id': 'anonsubgift', login: 'ananonymousgifter', 'msg-param-recipient-display-name': 'A', 'msg-param-community-gift-id': 'c1' });
+  notice({ 'msg-id': 'subgift', login: 'ananonymousgifter', 'msg-param-recipient-display-name': 'B', 'msg-param-community-gift-id': 'c1' });
+  // a single gift (no community id) alerts on its own
+  notice({ 'msg-id': 'subgift', login: 'kim', 'display-name': 'Kim', 'msg-param-recipient-display-name': 'C' });
+  notice({ 'msg-id': 'giftpaidupgrade', login: 'lee', 'display-name': 'Lee' });
+  notice({ 'msg-id': 'primepaidupgrade', login: 'max', 'display-name': 'Max', 'msg-param-sub-plan': '2000' });
+  bot.off('alert', onAlert);
+
+  assert.equal(alerts[0].type, 'giftbomb');
+  assert.equal(alerts[0].user, 'Anonymous');
+  assert.equal(alerts[0].amount, 2);
+  assert.ok(alerts[1].partOfBomb && alerts[2].partOfBomb);
+  assert.equal(alerts[1].user, 'Anonymous');
+  assert.equal(alerts[3].partOfBomb, undefined);
+  assert.equal(alerts[3].recipient, 'C');
+  assert.deepEqual([alerts[4].type, alerts[4].tier], ['sub', 'Tier 1']);
+  assert.deepEqual([alerts[5].type, alerts[5].tier], ['sub', 'Tier 2']);
+});

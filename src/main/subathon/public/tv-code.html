@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect TV</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Space+Grotesk:wght@700&display=swap">
+<link rel="stylesheet" href="/static/css/common.css">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; font-size: 1.2vw; }
+  .box { padding: 3vw 4vw; text-align: center; width: min(46vw, 92vw); }
+  h1 { font-family: var(--display); font-size: 3vw; margin: 0 0 .6vw; }
+  p { color: var(--muted); margin: 0 0 2vw; }
+  input { text-align: center; font-size: 3vw !important; letter-spacing: .4em; text-transform: uppercase; font-family: var(--display) !important; padding: 1vw !important; }
+  .btn { margin-top: 1.6vw; width: 100%; font-size: 1.6vw; padding: 1.2vw; }
+  .err { color: var(--bad); margin-top: 1vw; }
+  @media (max-width: 800px) { body { font-size: 16px; } h1 { font-size: 28px; } input { font-size: 28px !important; } .btn { font-size: 18px; padding: 14px; } .box { padding: 28px 20px; } }
+</style>
+</head>
+<body>
+<div class="backdrop"></div>
+<form class="box card" method="post" action="/tv">
+  <h1 class="grad-text">Connect your TV</h1>
+  <p>Enter the 6-character TV code shown on your dashboard.</p>
+  <input type="text" name="code" maxlength="6" autocomplete="off" autocapitalize="characters" autofocus required>
+  <button class="btn primary" type="submit">Open TV screen</button>
+  <div class="err" id="err" hidden>That code didn’t match. Check the dashboard and try again.</div>
+</form>
+<script>if (location.search.indexOf('wrong') >= 0) document.getElementById('err').hidden = false;</script>
+</body>
+</html>

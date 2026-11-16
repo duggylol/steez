@@ -69,8 +69,14 @@ export function flush() {
   timer = null;
   try {
     const tmp = FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, FILE);
+    const json = JSON.stringify(db);
+    fs.writeFileSync(tmp, json);
+    try {
+      fs.renameSync(tmp, FILE);
+    } catch {
+      // On Windows, antivirus or file indexing can briefly lock the file; fall back to a direct write.
+      fs.writeFileSync(FILE, json);
+    }
   } catch (e) {
     log.error('Failed to save database', e);
   }

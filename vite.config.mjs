@@ -18,6 +18,7 @@ export default defineConfig({
       '/ws': { target: target.replace('http', 'ws'), ws: true },
       '/overlay': target,
       '/queueup-ws': { target: target.replace('http', 'ws'), ws: true },
+      '/subathon': { target, ws: true },
     },
   },
 });

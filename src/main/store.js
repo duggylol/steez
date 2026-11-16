@@ -19,8 +19,14 @@ export function createStore(dir, name, defaults = {}) {
     timer = null;
     try {
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(file + '.tmp', JSON.stringify(data, null, 2));
-      fs.renameSync(file + '.tmp', file);
+      const json = JSON.stringify(data, null, 2);
+      fs.writeFileSync(file + '.tmp', json);
+      try {
+        fs.renameSync(file + '.tmp', file);
+      } catch {
+        // On Windows, antivirus or file indexing can briefly lock the file; fall back to a direct write.
+        fs.writeFileSync(file, json);
+      }
     } catch (e) {
       console.error(`[store:${name}] save failed`, e);
     }

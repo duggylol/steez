@@ -1,10 +1,11 @@
 # Steez
 
-One lightweight desktop app for streamers that replaces three tools:
+One lightweight desktop app for streamers that replaces four tools:
 
 - **Chat bot**: a StreamElements / Streamlabs bot replacement with commands, timers, moderation, loyalty points, games, giveaways, polls, bets, AI, alerts, achievements and analytics.
 - **Song Requests**: SongSeek built in. Spotify, YouTube and SoundCloud requests from chat or channel points.
 - **Viewer Queue**: QueueUp built in. Party and queue management, an OBS overlay, and TikTok gift tracking.
+- **Subathon**: Subathon Media Player built in. A countdown that subs, bits and donations (Streamlabs, StreamElements, Ko-fi) add time to, goals, a TV screen and a viewer page on your home network, and sounds/videos viewers trigger by paying a price or typing a code.
 
 Steez uses one Twitch login and one chat connection for everything. Its single local server hosts every OBS overlay. It checks for updates on every launch.
 
@@ -28,8 +29,15 @@ On first launch Steez reads the other apps' data, but only reads it and never ch
 |---|---|
 | SongSeek (`%APPDATA%\SongSeek`) | Spotify login and Spotify app, Twitch app and login (if still valid), reward name, toggles, volume, pending requests |
 | QueueUp (`%APPDATA%\queueup`) | Queue, party, rules, overlay styling, gift overlay styling, TikTok username, avatar cache |
+| Subathon Media Player (its `data` folder, found in Downloads, Desktop or Documents) | Timer, media and prices, uploaded files, goals, settings, TV code and dashboard password. If it lives somewhere else, use *Subathon → Settings → Import* |
 
 Once you've checked everything carried over, you can uninstall the old apps.
+
+### Subathon TV and viewer page
+
+Turn on the *TV & viewer server* under *Subathon → Screens & links*. It serves only the subathon pages on your home network (port 3000 by default): the TV screen at `/tv/CODE`, the viewer page at `/`, and the password-protected remote dashboard at `/admin`. If the TV can't connect, *Fix TV connection* fixes the usual Windows network and firewall causes (it asks for admin rights). *Start tunnel* puts the pages on the internet through a free Cloudflare quick tunnel, which viewers and Ko-fi webhooks need.
+
+Chat commands: `!subathon` (time left and the next goal) and `!addtime 10m` for mods.
 
 The SongSeek now-playing overlay keeps its address, `http://127.0.0.1:43112/overlay`, so existing OBS sources keep working. QueueUp's overlays moved to `/overlay/queue` and `/overlay/gifts`.
 
@@ -123,6 +131,7 @@ src/main/            Electron main process
   bot/               chat bot core + modules
   songseek/          song requests (Spotify control, search, yt-dlp, now-playing overlay)
   queueup/           viewer queue, TikTok gifts, queue + gift overlays
+  subathon/          subathon timer engine, TV/viewer server (LAN), donations, tunnel, TV fixer
 src/renderer/        React UI (one design system: styles/steez.css + ui.jsx)
 resources/bin/       bundled yt-dlp
 ```

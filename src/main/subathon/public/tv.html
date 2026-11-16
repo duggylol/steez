@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subathon TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/static/css/common.css">
+<link rel="stylesheet" href="/static/css/tv.css">
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="grain"></div>
+
+<div id="stage" class="stage">
+  <main class="main">
+    <header class="topbar">
+      <div class="brand"><span class="live"><i></i>LIVE</span><h1 id="title">SUBATHON</h1></div>
+      <div class="top-right">
+        <span id="multiplier" class="mult" hidden></span>
+        <span id="paused" class="state-chip" hidden>PAUSED</span>
+        <span id="conn" class="conn"><i class="dot connected"></i></span>
+      </div>
+    </header>
+
+    <section class="timer-card card">
+      <div class="timer-label">TIME REMAINING</div>
+      <div id="timer" class="timer mono">00:00:00</div>
+      <div id="timerSub" class="timer-sub">&nbsp;</div>
+      <div id="pops" class="pops"></div>
+      <div class="stats">
+        <div class="stat sub"><span class="ico" data-icon="sub"></span><b id="sSubs">0</b><small>subs</small></div>
+        <div class="stat bits"><span class="ico" data-icon="bits"></span><b id="sBits">0</b><small>bits</small></div>
+        <div class="stat money" id="statMoney"><span class="ico" data-icon="money"></span><b id="sMoney">$0</b><small>donated</small></div>
+        <div class="stat tiktok" id="statCoins" style="display:none"><span class="ico" data-icon="tiktok"></span><b id="sCoins">0</b><small>coins</small></div>
+        <div class="stat time"><span class="ico" data-icon="clock"></span><b id="sTime">0m</b><small>added</small></div>
+      </div>
+    </section>
+
+    <section class="lower">
+      <div class="card panel goals-panel" id="goalsPanel">
+        <div class="panel-head"><span data-icon="goal" class="ico"></span>GOALS</div>
+        <div id="goals" class="goals"></div>
+      </div>
+      <div class="card panel feed-panel" id="feedPanel">
+        <div class="panel-head"><span data-icon="bolt" class="ico"></span>LATEST SUPPORT</div>
+        <div id="feed" class="feed"></div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="card chat-panel" id="chatPanel">
+    <div class="panel-head"><span class="ico chat-ico"></span>CHAT <span id="chan" class="chan"></span></div>
+    <div id="chat" class="chat"></div>
+  </aside>
+</div>
+
+<canvas id="fx" class="fx-layer"></canvas>
+<div id="fxWave" class="fx-wave"></div>
+<div id="fxRings" class="fx-rings"></div>
+
+<div id="alert" class="alert" hidden>
+  <div class="alert-inner">
+    <div class="alert-shine"></div>
+    <div class="alert-icon" id="alertIcon"></div>
+    <div class="alert-body">
+      <div class="alert-title"><b id="alertUser"></b> <span id="alertAction"></span></div>
+      <div class="alert-msg" id="alertMsg"></div>
+    </div>
+    <div class="alert-added mono" id="alertAdded"></div>
+  </div>
+</div>
+
+<div id="media" class="media-layer" hidden>
+  <div class="flash" id="flash"></div>
+  <div class="media-box" id="mediaBox"></div>
+  <div class="media-caption">
+    <div class="media-name" id="mediaName"></div>
+    <div class="media-by" id="mediaBy"></div>
+  </div>
+  <div class="media-queue" id="mediaQueue"></div>
+</div>
+
+<div id="ended" class="ended" hidden>
+  <div><div class="ended-small">THE SUBATHON IS</div><div class="ended-big grad-text">COMPLETE</div></div>
+</div>
+
+<div id="unlock" class="unlock">
+  <button id="unlockBtn" class="btn primary lg unlock-btn" autofocus>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
+    Press OK to start the TV screen
+  </button>
+  <p>TV browsers block sound until you press a button once.</p>
+</div>
+
+<script src="/static/js/common.js"></script>
+<script src="/static/js/tv.js"></script>
+</body>
+</html>

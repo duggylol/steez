@@ -36,31 +36,38 @@ export function init(bot) {
   bot.alert = alert;
 
   // ─── IRC USERNOTICE → subs, resubs, gifts, raids ───────────
-  const giftBombs = new Map(); // gifter login -> remaining count to suppress
+  // Gift bombs: Twitch sends one submysterygift ("X is gifting 10 subs") followed by one subgift per
+  // recipient, all carrying the same msg-param-community-gift-id. The bomb gets the alert; its
+  // individual gifts are recorded silently. Anonymous gifts come as anonsubgift/anonsubmysterygift
+  // (or from the login "ananonymousgifter").
+  const ANON = 'ananonymousgifter';
   bot.on('irc:usernotice', ({ tags, text }) => {
     const id = tags['msg-id'];
-    const user = tags['display-name'] || tags.login;
-    const login = tags.login;
+    const anon = id === 'anonsubgift' || id === 'anonsubmysterygift' || tags.login === ANON;
+    const user = anon ? 'Anonymous' : tags['display-name'] || tags.login;
+    const login = anon ? ANON : tags.login;
     const tier = TIERS[tags['msg-param-sub-plan']] || 'Tier 1';
     switch (id) {
       case 'sub':
         return alert({ type: 'sub', user, login, tier, months: 1, message: text });
       case 'resub':
         return alert({ type: 'resub', user, login, tier, months: Number(tags['msg-param-cumulative-months']) || 1, message: text });
-      case 'subgift': {
+      // Someone keeps a sub they were gifted (or upgrades Prime) by paying for it — a sub too.
+      case 'giftpaidupgrade':
+      case 'anongiftpaidupgrade':
+      case 'primepaidupgrade':
+        return alert({ type: 'sub', user: tags['display-name'] || tags.login, login: tags.login, tier: id === 'primepaidupgrade' ? tier : 'Tier 1', months: 1, message: '' });
+      case 'subgift':
+      case 'anonsubgift': {
         const recipient = tags['msg-param-recipient-display-name'];
-        const left = giftBombs.get(login) || 0;
-        if (left > 0) {
-          giftBombs.set(login, left - 1);
-          return alert({ type: 'giftsub', user, login, tier, recipient }, { silent: true });
-        }
-        bot.emit('achievement:unlock', login, 'generous');
+        if (tags['msg-param-community-gift-id']) return alert({ type: 'giftsub', user, login, tier, recipient, partOfBomb: true }, { silent: true });
+        if (!anon) bot.emit('achievement:unlock', login, 'generous');
         return alert({ type: 'giftsub', user, login, tier, recipient, amount: 1 });
       }
-      case 'submysterygift': {
+      case 'submysterygift':
+      case 'anonsubmysterygift': {
         const n = Number(tags['msg-param-mass-gift-count']) || 1;
-        giftBombs.set(login, (giftBombs.get(login) || 0) + n);
-        bot.emit('achievement:unlock', login, 'generous');
+        if (!anon) bot.emit('achievement:unlock', login, 'generous');
         return alert({ type: 'giftbomb', user, login, tier, amount: n });
       }
       case 'raid': {

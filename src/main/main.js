@@ -20,7 +20,7 @@ const DEV = process.env.STEEZ_DEV === '1';
 const API_KEY = crypto.randomBytes(24).toString('hex'); // per-launch secret for the local API
 
 /** Feature modules (CommonJS) living in src/main/<name>/index.cjs */
-const FEATURE_MODULES = ['songseek', 'queueup'];
+const FEATURE_MODULES = ['songseek', 'queueup', 'subathon'];
 
 let win = null;
 let splash = null;
@@ -192,6 +192,14 @@ async function startCore() {
       markImported: (key) => steez.merge({ importsDone: { ...steez.get('importsDone'), [key]: Date.now() } }),
       twitch: twitchHub,
       server,
+      checkKey: (req) => {
+        if (req.headers['x-steez-key'] === API_KEY) return true;
+        try {
+          return new URL(req.url, 'http://x').searchParams.get('key') === API_KEY;
+        } catch {
+          return false;
+        }
+      },
       overlays: { register: (o) => overlays.push({ module: name, ...o }) },
       log: { info: (...a) => log.info(prefix, ...a), warn: (...a) => log.warn(prefix, ...a), error: (...a) => log.error(prefix, ...a) },
       onQuit: (fn) => quitHooks.push(fn),
@@ -275,7 +283,11 @@ function registerIpc() {
     }
     return { ...steez.all(), builtinTwitchApp: BUILTIN_TWITCH_CLIENT_ID };
   });
-  ipcMain.handle('steez:overlays', () => ({ baseUrl: server ? server.url('') : '', list: overlays }));
+  ipcMain.handle('steez:overlays', () => ({
+    baseUrl: server ? server.url('') : '',
+    // Some overlays live on another server (the subathon TV screen) and resolve their URL now.
+    list: overlays.map((o) => (typeof o.url === 'function' ? { ...o, url: o.url() || '' } : o)),
+  }));
   ipcMain.handle('steez:imports', () => describeImports(app.getPath('appData')));
   ipcMain.handle('steez:twitch:status', () => twitchHub?.status());
   ipcMain.handle('steez:twitch:login', async () => {

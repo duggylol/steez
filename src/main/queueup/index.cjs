@@ -129,9 +129,12 @@ async function init(ctx) {
   let sampledRoom = null;
 
   const tiktok = new TikTokLive();
+  // Other Steez features (the subathon) listen for TikTok gifts through the bot's event bus.
+  const bus = ctx.twitch && ctx.twitch.bot;
   tiktok.on('gift', (g) => {
     gifts.handleGift(g);
     stats.handleGift(g);
+    if (bus && bus.emit) bus.emit('tiktok:gift', g);
   });
   const statsEvent = (name, fn) =>
     tiktok.on(name, (d) => {
@@ -147,6 +150,7 @@ async function init(ctx) {
   statsEvent('giftPanelUpdate', (d) => stats.handleGiftPanel(d));
   tiktok.on('status', (st) => {
     send('qu:tiktok', st);
+    if (bus && bus.emit) bus.emit('tiktok:status', st);
     if (overlays) overlays.pushGifts('tiktok');
     if (st.status === 'live' && st.roomId !== sampledRoom) {
       sampledRoom = st.roomId;
@@ -359,6 +363,7 @@ async function init(ctx) {
     botActions.action('queueup:next', () => store.nextGame());
     botActions.action('queueup:remove', ({ id } = {}) => store.removeById(id));
     botActions.action('queueup:open', ({ open } = {}) => store.updateSettings({ queueOpen: !!open }));
+    botActions.action('queueup:tiktok', () => tiktok.state);
   }
 
   handle('qu:settings:update', (patch) => {

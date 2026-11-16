@@ -147,6 +147,33 @@ export function createAiTools(bot) {
       run: ({ action }) =>
         action === 'status' ? run('queueup:state') : action === 'next' ? run('queueup:next') : run('queueup:open', { open: action === 'open' }),
     },
+    {
+      name: 'subathon_status',
+      level: 'everyone',
+      description: 'The subathon countdown: time left, whether it is running, totals (subs, bits, donations, time added), goals and how much time each sub/100 bits/donation adds.',
+      input: obj({}),
+      run: () => run('subathon:state'),
+    },
+    {
+      name: 'subathon_timer',
+      level: 'moderator',
+      description: 'Control the subathon countdown: start, pause, add or remove minutes (negative to remove), or set the exact time left. Only when explicitly asked.',
+      input: obj(
+        {
+          action: str('What to do', { enum: ['start', 'pause', 'add', 'set'] }),
+          minutes: num('Minutes to add/remove (add) or the new time left in minutes (set)'),
+        },
+        ['action'],
+      ),
+      run: ({ action, minutes }) => run('subathon:timer', { action, minutes }),
+    },
+    {
+      name: 'subathon_play',
+      level: 'moderator',
+      description: "Play one of the subathon's sounds/videos on the TV screen by name.",
+      input: obj({ name: str('Media name as listed by subathon_status') }, ['name']),
+      run: ({ name }) => run('subathon:play', { name }),
+    },
     { name: 'start_trivia', level: 'moderator', description: 'Start a trivia round in chat, optionally about a topic.', input: obj({ topic: str('Optional topic') }), run: (a) => run('trivia:start', a) },
     { name: 'spawn_raid_boss', level: 'moderator', description: 'Spawn a co-op raid boss chat fights with !attack.', input: obj({}), run: () => run('boss:spawn', {}) },
     {

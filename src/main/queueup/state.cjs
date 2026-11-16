@@ -107,8 +107,14 @@ function importLegacyState(raw) {
 function writeJsonAtomic(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file);
+  const json = JSON.stringify(data, null, 2);
+  fs.writeFileSync(tmp, json);
+  try {
+    fs.renameSync(tmp, file);
+  } catch {
+    // On Windows, antivirus or file indexing can briefly lock the file; fall back to a direct write.
+    fs.writeFileSync(file, json);
+  }
 }
 
 class Store extends EventEmitter {

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subathon menu overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+  /* OBS browser source: transparent page, one card at a time. Sized for ~600×220 but fluid (vw units). */
+  :root {
+    --accent: #a970ff; --accent2: #00e5ff;
+    --u: min(1vw, 2.6vh);                /* scale unit: follows the source size */
+    --dur: 3000ms;
+    --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  }
+  html, body { margin: 0; padding: 0; background: transparent !important; overflow: hidden; }
+  body { font-family: var(--font); color: #f4f4f4; -webkit-font-smoothing: antialiased; height: 100vh; }
+  [hidden] { display: none !important; }
+
+  #stage { position: absolute; left: calc(var(--u) * 2); right: calc(var(--u) * 2); bottom: calc(var(--u) * 2); }
+  .head { display: flex; align-items: center; gap: calc(var(--u) * 1.2); margin: 0 0 calc(var(--u) * 1.2) calc(var(--u) * .4);
+    font: 800 calc(var(--u) * 2.1)/1 var(--font); letter-spacing: .26em; text-transform: uppercase; color: rgba(255,255,255,.82);
+    text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+  .head i { width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1); background: var(--accent); flex: none; animation: blink 1.6s ease-in-out infinite; }
+  .head .count { margin-left: auto; letter-spacing: .12em; opacity: .55; font-weight: 700; }
+  @keyframes blink { 50% { opacity: .35; } }
+
+  .viewport { position: relative; display: grid; }
+  .viewport > .card { grid-area: 1 / 1; }
+
+  /* ---------- card (shared) ---------- */
+  .card { position: relative; overflow: hidden; }
+  .inner { position: relative; display: flex; align-items: center; gap: calc(var(--u) * 2.4); padding: calc(var(--u) * 2.2) calc(var(--u) * 2.6) calc(var(--u) * 2.6); }
+  .tile { position: relative; flex: none; width: calc(var(--u) * 13); height: calc(var(--u) * 13); display: grid; place-items: center; }
+  .tile svg { width: 46%; height: 46%; }
+  .tile img.gift { width: 82%; height: 82%; object-fit: contain; filter: drop-shadow(0 calc(var(--u) * .6) calc(var(--u) * 1.4) rgba(0,0,0,.45)); animation: bob 2.4s ease-in-out infinite; }
+  .tile .badge { position: absolute; right: calc(var(--u) * -.8); bottom: calc(var(--u) * -.8); width: calc(var(--u) * 4.6); height: calc(var(--u) * 4.6); display: grid; place-items: center; }
+  .tile .badge svg { width: 55%; height: 55%; }
+  @keyframes bob { 50% { transform: translateY(calc(var(--u) * -.7)) rotate(-4deg); } }
+  .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: calc(var(--u) * 1); }
+  .hook { display: flex; align-items: center; gap: calc(var(--u) * .9); font: 800 calc(var(--u) * 2.1)/1.1 var(--font); letter-spacing: .14em; text-transform: uppercase; }
+  .hook img { width: calc(var(--u) * 3); height: calc(var(--u) * 3); object-fit: contain; }
+  .hook .arrow { opacity: .7; }
+  .name { font: 700 calc(var(--u) * 5.4)/1.02 var(--display); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .desc { font: 500 calc(var(--u) * 2.5)/1.3 var(--font); opacity: .78; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .chips { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .9); margin-top: calc(var(--u) * .3); }
+  .chip { display: inline-flex; align-items: center; gap: calc(var(--u) * .7); padding: calc(var(--u) * .7) calc(var(--u) * 1.3); font: 700 calc(var(--u) * 2.3)/1 var(--font); white-space: nowrap; }
+  .chip svg, .chip img { width: calc(var(--u) * 2.5); height: calc(var(--u) * 2.5); object-fit: contain; flex: none; }
+  .chip.code { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; letter-spacing: .02em; }
+  .bar { position: absolute; left: 0; bottom: 0; height: calc(var(--u) * .5); width: 100%; transform-origin: left center; }
+  .bar.run { animation: drain var(--dur) linear forwards; }
+  @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+  /* enter / leave */
+  .card.enter { animation: cardIn .7s cubic-bezier(.16,1.1,.3,1) both; }
+  .card.enter .tile { animation: tileIn .8s cubic-bezier(.2,1.5,.35,1) .05s both; }
+  .card.enter .hook, .card.enter .name, .card.enter .desc { animation: rise .6s cubic-bezier(.2,1,.3,1) both; }
+  .card.enter .hook { animation-delay: .08s; } .card.enter .name { animation-delay: .14s; } .card.enter .desc { animation-delay: .22s; }
+  .card.enter .chip { animation: pop .5s cubic-bezier(.2,1.6,.4,1) both; }
+  .card.leave { animation: cardOut .45s cubic-bezier(.6,0,.8,.4) both; pointer-events: none; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(26%) scale(.96); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes cardOut { to { opacity: 0; transform: translateY(-22%) scale(.97); filter: blur(6px); } }
+  @keyframes tileIn { from { opacity: 0; transform: scale(.4) rotate(-14deg); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(calc(var(--u) * 2)); } }
+  @keyframes pop { from { opacity: 0; transform: scale(.6); } }
+  #stage.show { animation: stageIn .6s ease both; }
+  @keyframes stageIn { from { opacity: 0; } }
+
+  /* ---------- style: steez (flat greys, square, no gradients) ---------- */
+  .s-steez .head i { background: #d4d4d4; }
+  .s-steez .card { background: #1c1c1c; border: 1px solid #383838; }
+  .s-steez .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--u) * .5); background: #d4d4d4; }
+  .s-steez .tile { background: #262626; border: 1px solid #383838; color: #e6e6e6; }
+  .s-steez .tile .badge { background: #2a2a2a; border: 1px solid #444; color: #d4d4d4; }
+  .s-steez .hook { color: #a9a9a9; }
+  .s-steez .chip { background: #262626; border: 1px solid #383838; color: #e6e6e6; }
+  .s-steez .chip.tt { background: #d4d4d4; border-color: #d4d4d4; color: #121212; }
+  .s-steez .chip.code { color: #a9a9a9; background: transparent; border-style: dashed; }
+  .s-steez .bar { background: #d4d4d4; }
+  .s-steez .name { color: #f2f2f2; }
+
+  /* ---------- style: glass ---------- */
+  .s-glass .card { border-radius: calc(var(--u) * 2.6); background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.05)) , rgba(18,16,30,.58);
+    border: 1px solid rgba(255,255,255,.18); -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0,0,0,.4), 0 0 calc(var(--u) * 6) rgba(var(--accent-rgb), .25), inset 0 1px 0 rgba(255,255,255,.2); }
+  .s-glass .card::after { content: ''; position: absolute; top: -60%; left: -30%; width: 40%; height: 220%; transform: rotate(18deg);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent); animation: sheen 4.5s ease-in-out infinite; pointer-events: none; }
+  @keyframes sheen { 0%, 55% { left: -40%; } 100% { left: 130%; } }
+  .s-glass .tile { border-radius: calc(var(--u) * 2.2); background: linear-gradient(135deg, rgba(var(--accent-rgb), .55), rgba(var(--accent2-rgb), .35)); color: #fff;
+    box-shadow: 0 0 calc(var(--u) * 4) rgba(var(--accent-rgb), .45), inset 0 1px 0 rgba(255,255,255,.35); }
+  .s-glass .tile .badge { border-radius: 50%; background: rgba(20,18,32,.85); border: 1px solid rgba(255,255,255,.25); color: #fff; }
+  .s-glass .hook { color: var(--accent2); }
+  .s-glass .chip { border-radius: 999px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); }
+  .s-glass .chip.tt { background: linear-gradient(90deg, #fe2c55, #25f4ee); border: 0; color: #fff; }
+  .s-glass .chip.code { color: var(--accent2); border-style: dashed; border-color: rgba(var(--accent2-rgb), .6); background: rgba(var(--accent2-rgb), .1); }
+  .s-glass .bar { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 0 4px 4px 0; }
+  .s-glass .head i { border-radius: 50%; }
+
+  /* ---------- style: neon (animated gradient border + glow) ---------- */
+  .s-neon .card { padding: calc(var(--u) * .45); border-radius: calc(var(--u) * 1.6);
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent), var(--accent2)); background-size: 300% 100%;
+    animation-name: none; box-shadow: 0 0 calc(var(--u) * 3) rgba(var(--accent-rgb), .55), 0 0 calc(var(--u) * 7) rgba(var(--accent2-rgb), .3); }
+  .s-neon .card::before { content: ''; position: absolute; inset: 0; background: inherit; background-size: 300% 100%; animation: flow 3s linear infinite; }
+  .s-neon .card.enter { animation: cardIn .7s cubic-bezier(.16,1.1,.3,1) both; }
+  .s-neon .card.leave { animation: cardOut .45s cubic-bezier(.6,0,.8,.4) both; }
+  @keyframes flow { to { background-position: 300% 0; } }
+  .s-neon .inner { border-radius: calc(var(--u) * 1.25); background: radial-gradient(ellipse at 0% 0%, rgba(var(--accent-rgb), .22), transparent 60%), #0b0914; }
+  .s-neon .tile { border-radius: calc(var(--u) * 1.6); color: var(--accent2); border: 2px solid var(--accent2);
+    box-shadow: 0 0 calc(var(--u) * 2) rgba(var(--accent2-rgb), .7), inset 0 0 calc(var(--u) * 2) rgba(var(--accent2-rgb), .35); }
+  .s-neon .tile svg { filter: drop-shadow(0 0 6px var(--accent2)); }
+  .s-neon .tile .badge { border-radius: 50%; background: #0b0914; border: 2px solid var(--accent); color: var(--accent); }
+  .s-neon .name { text-shadow: 0 0 calc(var(--u) * 1.6) rgba(var(--accent-rgb), .9); }
+  .s-neon .hook { color: var(--accent2); text-shadow: 0 0 10px rgba(var(--accent2-rgb), .8); }
+  .s-neon .chip { border-radius: calc(var(--u) * .8); border: 1px solid rgba(var(--accent-rgb), .7); background: rgba(var(--accent-rgb), .12); box-shadow: 0 0 calc(var(--u) * 1.2) rgba(var(--accent-rgb), .35); }
+  .s-neon .chip.tt { border-color: #25f4ee; background: rgba(37,244,238,.12); box-shadow: 0 0 calc(var(--u) * 1.4) rgba(254,44,85,.5); }
+  .s-neon .chip.code { color: var(--accent2); border-style: dashed; border-color: var(--accent2); background: transparent; }
+  .s-neon .bar { left: calc(var(--u) * .45); right: calc(var(--u) * .45); width: auto; bottom: calc(var(--u) * .45); background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+
+  /* ---------- style: minimal (text lower-third) ---------- */
+  .s-minimal .card { background: transparent; }
+  .s-minimal .inner { padding: 0 0 calc(var(--u) * 1.6); gap: calc(var(--u) * 1.8); }
+  .s-minimal .tile { width: calc(var(--u) * 8); height: calc(var(--u) * 8); color: #fff; filter: drop-shadow(0 2px 6px rgba(0,0,0,.8)); }
+  .s-minimal .tile .badge { display: none; }
+  .s-minimal .name, .s-minimal .desc, .s-minimal .hook, .s-minimal .chip { text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
+  .s-minimal .hook { color: var(--accent2); }
+  .s-minimal .chips { gap: calc(var(--u) * 2); }
+  .s-minimal .chip { padding: 0; }
+  .s-minimal .chip svg, .s-minimal .chip img { filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
+  .s-minimal .chip.code { color: var(--accent2); }
+  .s-minimal .bar { height: calc(var(--u) * .35); background: linear-gradient(90deg, var(--accent), transparent); }
+  .s-minimal .head { display: none; }
+</style>
+</head>
+<body>
+<div id="stage" hidden>
+  <div class="head"><i></i><span id="head"></span><span class="count" id="count"></span></div>
+  <div class="viewport" id="viewport"></div>
+</div>
+<script>
+(function () {
+  var ICONS = {
+    audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
+    video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>',
+    image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>',
+    bits: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7 9-7 11-7-11z" opacity=".55"/><path d="M12 2l7 9-7 4-7-4z"/></svg>',
+    gift: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 7h-2.2A3 3 0 0 0 12 3.8 3 3 0 0 0 6.2 7H4a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h7V7h2v5h7a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM9 7a1 1 0 1 1 1-1v1H9zm6 0h-1V6a1 1 0 1 1 1 1zM4 13v7a1 1 0 0 0 1 1h6v-8H4zm9 8h6a1 1 0 0 0 1-1v-7h-7v8z"/></svg>',
+    money: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.4l-1.4-1.3C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1A6 6 0 0 1 16.5 3C19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.6 11.6z"/></svg>',
+    tiktok: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 2h-3.3v13.3a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6 0 .9.1V9.1a6.3 6.3 0 1 0 5.3 6.2V8.6a8 8 0 0 0 4.7 1.5V6.8a4.7 4.7 0 0 1-4.7-4.8z"/></svg>'
+  };
+  var params = new URLSearchParams(location.search);
+  var S = null, items = [], idx = -1, timer = null, current = null, lastSig = '';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function safeImg(url) { return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : ''; }
+  function num(n) { n = Number(n) || 0; return n.toLocaleString ? n.toLocaleString() : String(n); }
+  function money(n, cs) { n = Number(n) || 0; return (cs || '$') + (Math.round(n) === n ? n.toFixed(0) : n.toFixed(2)); }
+  function rgb(hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return null;
+    var n = parseInt(hex.slice(1), 16);
+    return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+  }
+  function flag(name, def) {
+    if (!params.has(name)) return def;
+    var v = params.get(name);
+    return !(v === '0' || v === 'false' || v === 'no' || v === 'off');
+  }
+
+  // Settings, with ?query overrides for per-source tweaks in OBS.
+  function opts() {
+    var o = (S && S.settings && S.settings.overlay) || {};
+    var style = params.get('style') || o.style || 'steez';
+    if (['steez', 'glass', 'neon', 'minimal'].indexOf(style) < 0) style = 'steez';
+    var interval = Number(params.get('interval') || o.interval || 3);
+    if (!(interval >= 1)) interval = 3;
+    return {
+      style: style, interval: Math.min(120, interval),
+      prices: flag('prices', o.showPrices !== false),
+      desc: flag('desc', o.showDescription !== false),
+      code: flag('code', o.showCode !== false),
+      tiktok: flag('tiktok', o.showTiktok !== false),
+      header: params.has('header') ? params.get('header') : (o.header != null ? o.header : 'WAKE-UP MENU')
+    };
+  }
+
+  function eligible(m, O) {
+    var p = m.prices || {};
+    var hasPrice = !!(p.bits || p.subs || (p.donation && S.settings.donationsEnabled !== false));
+    var hasTt = O.tiktok && m.tiktok && m.tiktok.length > 0;
+    return hasPrice || hasTt;
+  }
+
+  function giftLabel(g) { return (Number(g.minCount) > 1 ? g.minCount + '× ' : '') + (g.gift || 'Gift'); }
+
+  function buildCard(m, O) {
+    var s = S.settings, p = m.prices || {}, cs = s.currencySymbol || '$';
+    var tts = O.tiktok && m.tiktok ? m.tiktok : [];
+    var lead = tts[0];
+    var card = el('div', 'card');
+    var inner = el('div', 'inner');
+    var tile = el('div', 'tile');
+    var leadImg = lead && safeImg(lead.image);
+    if (leadImg) {
+      var gi = el('img', 'gift'); gi.src = leadImg; gi.alt = ''; tile.appendChild(gi);
+      var badge = el('div', 'badge'); badge.innerHTML = ICONS[m.type] || ICONS.audio; tile.appendChild(badge);
+    } else {
+      tile.innerHTML = ICONS[m.type] || ICONS.audio;
+      if (lead) { var b2 = el('div', 'badge'); b2.innerHTML = ICONS.tiktok; tile.appendChild(b2); }
+    }
+    inner.appendChild(tile);
+
+    var body = el('div', 'body');
+    if (lead) {
+      // TikTok gifts get the spotlight: "Send 5× Rose → Air horn"
+      var hook = el('div', 'hook');
+      hook.appendChild(el('span', '', 'Send ' + (Number(lead.minCount) > 1 ? lead.minCount + '× ' : 'a ') + (lead.gift || 'gift')));
+      if (leadImg) { var hi = el('img'); hi.src = leadImg; hi.alt = ''; hook.appendChild(hi); }
+      hook.appendChild(el('span', 'arrow', '→'));
+      body.appendChild(hook);
+    } else {
+      var hook2 = el('div', 'hook', { audio: 'Sound', video: 'Video', image: 'Image' }[m.type] || 'Media');
+      body.appendChild(hook2);
+    }
+    body.appendChild(el('div', 'name', m.name || 'Untitled'));
+    if (O.desc && m.description) body.appendChild(el('div', 'desc', m.description));
+
+    var chips = el('div', 'chips');
+    var n = 0;
+    function chip(cls, iconHtml, imgUrl, text) {
+      var c = el('span', 'chip ' + cls);
+      if (imgUrl) { var i = el('img'); i.src = imgUrl; i.alt = ''; c.appendChild(i); }
+      else if (iconHtml) { var w = el('span'); w.style.display = 'contents'; w.innerHTML = iconHtml; c.appendChild(w); }
+      c.appendChild(el('span', '', text));
+      c.style.animationDelay = (0.28 + n++ * 0.07) + 's';
+      chips.appendChild(c);
+    }
+    tts.forEach(function (g) { chip('tt', ICONS.tiktok, safeImg(g.image), giftLabel(g)); });
+    if (O.prices) {
+      if (p.bits) chip('bits', ICONS.bits, '', num(p.bits) + ' bits');
+      if (p.subs) chip('subs', ICONS.gift, '', p.subs + ' gifted sub' + (p.subs > 1 ? 's' : ''));
+      if (p.donation && s.donationsEnabled !== false) chip('money', ICONS.money, '', money(p.donation, cs));
+    }
+    if (O.code && m.code) chip('code', '', '', (s.triggerPrefix || '#') + m.code);
+    if (chips.childNodes.length) body.appendChild(chips);
+    inner.appendChild(body);
+    card.appendChild(inner);
+    card.appendChild(el('div', 'bar'));
+    return card;
+  }
+
+  function show(i, animate) {
+    var O = opts();
+    var vp = $('viewport');
+    var m = items[i];
+    if (!m) return;
+    idx = i;
+    var card = buildCard(m, O);
+    card.setAttribute('data-id', m.id);
+    if (current && animate) {
+      var old = current;
+      old.classList.remove('enter');
+      old.classList.add('leave');
+      setTimeout(function () { if (old.parentNode) old.parentNode.removeChild(old); }, 460);
+    } else if (current && current.parentNode) {
+      current.parentNode.removeChild(current);
+    }
+    if (animate || !current) card.classList.add('enter');
+    vp.appendChild(card);
+    current = card;
+    $('count').textContent = items.length > 1 ? (i + 1) + ' / ' + items.length : '';
+    var bar = card.querySelector('.bar');
+    if (items.length > 1) bar.classList.add('run'); else bar.hidden = true;
+  }
+
+  function schedule() {
+    clearInterval(timer);
+    timer = null;
+    if (items.length > 1) {
+      timer = setInterval(function () { show((idx + 1) % items.length, true); }, opts().interval * 1000);
+    }
+  }
+
+  function render() {
+    var O = opts();
+    var s = S.settings || {};
+    var root = document.documentElement.style;
+    if (s.accent) { root.setProperty('--accent', s.accent); var a = rgb(s.accent); if (a) root.setProperty('--accent-rgb', a); }
+    if (s.accent2) { root.setProperty('--accent2', s.accent2); var b = rgb(s.accent2); if (b) root.setProperty('--accent2-rgb', b); }
+    root.setProperty('--dur', (O.interval * 1000) + 'ms');
+    document.body.className = 's-' + O.style;
+    $('head').textContent = O.header || '';
+    $('head').parentNode.hidden = !O.header;
+
+    items = (S.media || []).filter(function (m) { return eligible(m, O); });
+    var stage = $('stage');
+    if (!items.length) {
+      clearInterval(timer); timer = null;
+      stage.hidden = true; stage.classList.remove('show');
+      $('viewport').innerHTML = ''; current = null; idx = -1; lastSig = '';
+      return;
+    }
+    // Only redraw when something visible changed, so a re-sent state doesn't restart the card.
+    var sig = JSON.stringify([O, items, s.currencySymbol, s.triggerPrefix, s.donationsEnabled]);
+    if (sig === lastSig && current) return;
+    lastSig = sig;
+    var keepId = current && current.getAttribute('data-id');
+    var at = 0;
+    for (var i = 0; i < items.length; i++) if (items[i].id === keepId) at = i;
+    if (stage.hidden) { stage.hidden = false; stage.classList.add('show'); }
+    show(at, false);
+    schedule();
+  }
+
+  // ------------------------------------------------------------ live connection
+  var path = location.pathname.indexOf('/overlay/subathon-menu') === 0 ? '/subathon/public-ws' : '/ws?role=public';
+  var retry = 0, ping = null;
+  function connect() {
+    var ws;
+    try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + path); }
+    catch (e) { return setTimeout(connect, 3000); }
+    ws.onopen = function () {
+      retry = 0;
+      clearInterval(ping);
+      ping = setInterval(function () { try { ws.send('{"t":"ping"}'); } catch (e) {} }, 20000);
+    };
+    ws.onmessage = function (e) {
+      var m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m.t === 'init' && m.state) { S = m.state; render(); }
+    };
+    ws.onclose = function () {
+      clearInterval(ping);
+      setTimeout(connect, Math.min(15000, 800 * Math.pow(1.7, retry++)));
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

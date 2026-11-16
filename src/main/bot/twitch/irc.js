@@ -5,6 +5,9 @@ import { splitMessage } from '../util.js';
 
 const UNESCAPE = { '\\s': ' ', '\\:': ';', '\\\\': '\\', '\\r': '\r', '\\n': '\n' };
 
+/** During Shared Chat, Twitch mirrors the other channels' messages and events into ours. */
+export const isSharedFromElsewhere = (tags) => !!(tags && tags['source-room-id'] && tags['room-id'] && tags['source-room-id'] !== tags['room-id']);
+
 export function parseLine(line) {
   const tags = {};
   let prefix = '';
@@ -129,9 +132,11 @@ export class TwitchIRC extends EventEmitter {
         break;
       }
       case 'PRIVMSG':
+        if (isSharedFromElsewhere(m.tags)) break;
         this.emit('message', { tags: m.tags, login: m.nick, channel: (m.params[0] || '').slice(1), text: m.trailing });
         break;
       case 'USERNOTICE':
+        if (isSharedFromElsewhere(m.tags)) break;
         this.emit('usernotice', { tags: m.tags, text: m.trailing });
         break;
       default:
