@@ -88,7 +88,7 @@
             <button class="btn sm" data-tv="test-sound">Test sound</button>
           </div>
           <label class="switch mt"><input type="checkbox" id="mediaPaused"><i></i>Pause viewer-triggered media</label>
-          <p class="hint">When paused, events still add time and show alerts, but sounds/videos won't play.</p>
+          <p class="hint">When paused, events still count and show alerts, but sounds/videos won't play.</p>
         </div>
       </div>
 
@@ -166,7 +166,7 @@
             <label class="field grow"><span>Viewer name</span><input type="text" id="tUser" value="TestViewer"></label>
             <label class="field grow"><span>Message (put trigger codes here)</span><input type="text" id="tMsg" placeholder="e.g. wake up! #horn"></label>
           </div>
-          <label class="switch mt"><input type="checkbox" id="tReal"><i></i>Count for real (adds time + stats)</label>
+          <label class="switch mt"><input type="checkbox" id="tReal"><i></i>Count for real (stats, and time if that is on)</label>
           <div class="quick-grid mt" id="quickGrid"></div>
           <div class="divider"></div>
           <div class="label">Custom event</div>
@@ -254,6 +254,8 @@
 
       <div class="card pad">
         <div class="label">Time rules</div>
+        <label class="check"><input type="checkbox" id="sAddTime"> <b>Subs, bits, donations and TikTok gifts add time to the countdown</b></label>
+        <p class="hint">Off by default: support still counts, alerts and plays sounds, but only time you add yourself changes the clock.</p>
         <p class="hint">How much time each thing adds to the clock (in minutes).</p>
         <div class="form-grid">
           <label class="field"><span>Prime sub</span><input type="number" step="any" min="0" data-time="prime"></label>
@@ -263,8 +265,10 @@
           <label class="field"><span>Per 100 bits</span><input type="number" step="any" min="0" data-time="per100Bits"></label>
           <label class="field"><span id="perDollarLbl">Per $1 donated</span><input type="number" step="any" min="0" data-time="perDollar"></label>
           <label class="field"><span>Multiplier (happy hour)</span><input type="number" step="0.1" min="0" id="sMult"><small>2 = double time</small></label>
-          <label class="field"><span>Starting time (hours)</span><input type="number" step="any" min="0" id="sInitial"><small>Used when you reset the timer</small></label>
-          <label class="field"><span>Max length (hours)</span><input type="number" step="any" min="0" id="sCap"><small>0 = no cap</small></label>
+          <label class="field"><span>Starting time (days)</span><input type="number" step="1" min="0" id="sInitialD"></label>
+          <label class="field"><span>+ hours</span><input type="number" step="any" min="0" id="sInitial"><small>Used when you reset the timer</small></label>
+          <label class="field"><span>Max length (days)</span><input type="number" step="1" min="0" id="sCapD"></label>
+          <label class="field"><span>+ hours</span><input type="number" step="any" min="0" id="sCap"><small>0 days 0 hours = no cap</small></label>
         </div>
       </div>
 

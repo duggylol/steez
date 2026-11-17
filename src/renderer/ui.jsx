@@ -215,6 +215,7 @@ const PATHS = {
   trash: 'M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.7 9h5.6l.7-9',
   tiktok: 'M9.5 2.5c.3 1.7 1.5 3 3.5 3.2v2.1c-1.3 0-2.5-.4-3.5-1.1v4.1a3.3 3.3 0 1 1-3.3-3.3v2.1a1.2 1.2 0 1 0 1.2 1.2V2.5z',
   volume: 'M2.5 6h2.5l3.5-3v10L5 10H2.5zm8.5-.5a3 3 0 0 1 0 5',
+  download: 'M8 2.5v8M4.5 7 8 10.5 11.5 7M2.5 13.5h11',
 };
 export function Icon({ name, size }) {
   const d = PATHS[name] || PATHS.spark;

@@ -34,7 +34,8 @@ export function fmtClock(ms) {
   const m = Math.floor(s / 60);
   s -= m * 60;
   const hh = d > 0 ? h + d * 24 : h;
-  return { text: pad(hh) + ':' + pad(m) + ':' + pad(s), days: d, hours: hh, minutes: m, seconds: s };
+  const text = (d > 0 ? d + 'd ' : '') + pad(h) + ':' + pad(m) + ':' + pad(s);
+  return { text, days: d, hours: hh, minutes: m, seconds: s };
 }
 
 export function fmtDur(secs) {

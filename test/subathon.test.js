@@ -41,6 +41,7 @@ const sub = createSubathon({
 });
 sub.db.lan = { enabled: true, port: 0 };
 sub.db.settings.enabled = true;
+sub.db.settings.time.eventsAddTime = true; // most tests below exercise time being added
 await sub.start();
 const LAN = `http://127.0.0.1:${sub.lanState().boundPort}`;
 
@@ -343,6 +344,33 @@ test('!addtime parses durations', () => {
   assert.equal(parseMinutes('-15m'), -15);
   assert.equal(parseMinutes('90s'), 1.5);
   assert.equal(parseMinutes('soon'), null);
+  assert.equal(parseMinutes('1d'), 1440);
+  assert.equal(parseMinutes('2d 6h'), 2 * 1440 + 360);
+});
+
+test('by default support adds no time, but still counts and alerts', () => {
+  const { defaults } = require('../src/main/subathon/lib/store.cjs');
+  assert.equal(defaults().settings.time.eventsAddTime, false);
+  reset();
+  sub.db.settings.time.eventsAddTime = false;
+  try {
+    const before = sub.remainingMs();
+    const r = sub.processEvent({ type: 'sub', user: 'a', tier: 'tier1', amount: 1 });
+    sub.processEvent({ type: 'bits', user: 'b', amount: 1000, message: 'Cheer1000' });
+    sub.processEvent({ type: 'donation', user: 'c', amount: 20 });
+    sub.processEvent({ type: 'tiktok', user: 'd', coins: 500, extraSeconds: 60, gift: 'Rose' });
+    assert.ok(r, 'the sub still produces an alert');
+    assert.equal(r.added, 0);
+    assert.equal(sub.db.stats.subs, 1);
+    assert.equal(sub.db.stats.bits, 1000);
+    assert.equal(sub.db.stats.timeAdded, 0);
+    assert.equal(sub.remainingMs(), before);
+    // manual time still works
+    sub.timerAction('add', 86400);
+    assert.equal(sub.remainingMs(), before + 86400e3);
+  } finally {
+    sub.db.settings.time.eventsAddTime = true;
+  }
 });
 
 test('TikTok gifts: rules play media, combos count once, coins add time', async () => {

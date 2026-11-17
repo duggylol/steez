@@ -149,18 +149,10 @@
 
   $('btnStartPause').addEventListener('click', safe(() => api('POST', '/api/timer', { action: S.timer.running ? 'pause' : 'start' })));
   document.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', safe(() => api('POST', '/api/timer', { action: 'add', seconds: Number(b.dataset.add) }))));
-  function parseHMS(v) {
-    v = v.trim();
-    if (!v) return null;
-    if (/^\d+(\.\d+)?h$/i.test(v)) return parseFloat(v) * 3600;
-    const parts = v.split(':').map(Number);
-    if (parts.some((n) => isNaN(n))) return null;
-    while (parts.length < 3) parts.unshift(0);
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
+  const parseHMS = (v) => SMP.parseDuration(v);
   $('btnSet').addEventListener('click', safe(async () => {
     const secs = parseHMS($('setTime').value);
-    if (secs == null) throw new Error('Use HH:MM:SS, e.g. 12:00:00');
+    if (secs == null) throw new Error('Try 2d 6h, 36h, 90m or 12:00:00');
     await api('POST', '/api/timer', { action: 'set', seconds: secs });
     $('setTime').value = '';
     SMP.toast('Timer set to ' + SMP.fmtClock(secs * 1000).text);
@@ -565,7 +557,7 @@
     const r = await api('POST', '/api/test-match', { currency: $('mCur').value, amount: $('mAmount').value, message: $('mMsg').value });
     const out = $('matchOut');
     out.innerHTML = '';
-    if (!r.matched.length) out.appendChild(h('span', { class: 'hint', text: 'Nothing would play for this event (it still adds time).' }));
+    if (!r.matched.length) out.appendChild(h('span', { class: 'hint', text: 'Nothing would play for this event (it still counts).' }));
     else { out.appendChild(h('span', { class: 'hint', text: 'Would play:' })); r.matched.forEach((m) => out.appendChild(h('span', { class: 'chip code', text: '▶ ' + m.name }))); }
   }));
   function renderPriceFire() {
@@ -624,7 +616,9 @@
     $('sSeToken').value = s.donation.provider === 'streamelements' ? s.donation.token : '';
     $('sKofiToken').value = s.donation.kofiToken || '';
     document.querySelectorAll('[data-time]').forEach((el) => { el.value = +(s.time[el.dataset.time] / 60).toFixed(2); });
-    $('sMult').value = s.time.multiplier; $('sInitial').value = s.time.initialHours; $('sCap').value = s.time.capHours;
+    $('sMult').value = s.time.multiplier; $('sInitialD').value = Math.floor(s.time.initialHours / 24); $('sInitial').value = +(s.time.initialHours % 24).toFixed(2);
+    $('sCapD').value = Math.floor(s.time.capHours / 24); $('sCap').value = +(s.time.capHours % 24).toFixed(2);
+    $('sAddTime').checked = s.time.eventsAddTime === true;
     $('sPrefix').value = s.triggerPrefix; $('sCurrency').value = s.currencySymbol; $('sMatch').value = s.matchMode;
     $('sTitle').value = s.title; $('sAccent').value = s.accent; $('sAccent2').value = s.accent2;
     $('sShowChat').checked = s.tv.showChat; $('sShowGoals').checked = s.tv.showGoals; $('sShowFeed').checked = s.tv.showFeed; $('sShowNames').checked = s.tv.showNames !== false;
@@ -651,7 +645,7 @@
     const p = $('sProvider').value;
     const time = {};
     document.querySelectorAll('[data-time]').forEach((el) => { time[el.dataset.time] = Math.round(Number(el.value || 0) * 60); });
-    Object.assign(time, { multiplier: Number($('sMult').value || 1), initialHours: Number($('sInitial').value || 0), capHours: Number($('sCap').value || 0) });
+    Object.assign(time, { multiplier: Number($('sMult').value || 1), initialHours: Number($('sInitialD').value || 0) * 24 + Number($('sInitial').value || 0), capHours: Number($('sCapD').value || 0) * 24 + Number($('sCap').value || 0), eventsAddTime: $('sAddTime').checked });
     const body = {
       channel: $('sChannel').value, title: $('sTitle').value, accent: $('sAccent').value, accent2: $('sAccent2').value,
       triggerPrefix: $('sPrefix').value, currencySymbol: $('sCurrency').value, matchMode: $('sMatch').value, publicUrl: $('sPublicUrl').value,
@@ -672,7 +666,7 @@
   }));
   $('btnLogout').addEventListener('click', safe(async () => { await api('POST', '/api/logout'); location.reload(); }));
   $('btnResetTimer').addEventListener('click', safe(async () => {
-    if (!confirm('Reset the timer to ' + S.settings.time.initialHours + ' hours and stop it?')) return;
+    if (!confirm('Reset the timer to ' + SMP.fmtHours(S.settings.time.initialHours) + ' and stop it?')) return;
     await api('POST', '/api/timer', { action: 'reset' });
     SMP.toast('Timer reset');
   }));

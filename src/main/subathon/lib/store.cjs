@@ -37,12 +37,14 @@ function defaults() {
         perDollar: 60, // seconds per 1 unit of donation currency
         per100Coins: 60, // seconds per 100 TikTok coins (Steez)
         multiplier: 1,
+        // Steez: subs, bits, donations and TikTok gifts only add time when the streamer turns this on
+        eventsAddTime: false,
         capHours: 0, // 0 = no cap on total subathon length
         initialHours: 4,
       },
       donation: { provider: 'none', token: '', kofiToken: '' },
       tv: { showChat: true, showFeed: true, showGoals: true, alertSeconds: 6, volume: 100, showNames: true },
-      viewer: { intro: 'Every sub, bit and donation adds time to the clock. Use the menu below to wake me up!', showRecent: true, previews: true },
+      viewer: { intro: 'Use the menu below to wake me up!', showRecent: true, previews: true },
       // Steez: TikTok gifts (from the TikTok Gifts page connection)
       tiktok: { enabled: true, alertMinCoins: 1 },
       // Steez: alert effects by size. A tier applies when the event reaches any of its thresholds

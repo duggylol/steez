@@ -54,9 +54,9 @@ function parseMinutes(input) {
   if (/^\d+(\.\d+)?$/.test(body)) return sign * Number(body);
   let total = 0,
     hit = false;
-  for (const [, n, u] of body.matchAll(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|seconds?)/g)) {
+  for (const [, n, u] of body.matchAll(/(\d+(?:\.\d+)?)\s*(d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|seconds?)/g)) {
     hit = true;
-    total += Number(n) * (u.startsWith('h') ? 60 : u.startsWith('s') ? 1 / 60 : 1);
+    total += Number(n) * (u.startsWith('d') ? 1440 : u.startsWith('h') ? 60 : u.startsWith('s') ? 1 / 60 : 1);
   }
   return hit ? sign * total : null;
 }
@@ -105,7 +105,7 @@ async function init(ctx) {
     ctx.features.register({
       id: 'subathon',
       name: 'Subathon',
-      description: 'Countdown timer that subs, bits, donations and TikTok gifts add time to, with the TV screen and viewer page.',
+      description: 'Countdown timer with a TV screen, viewer page and wake-up media menu. Subs, bits, donations and TikTok gifts can add time if you turn that on.',
       page: 'subathon',
       group: 'Features',
       get: () => sub.isOn(),

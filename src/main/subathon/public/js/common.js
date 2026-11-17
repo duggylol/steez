@@ -26,7 +26,31 @@
     var h = Math.floor(s / 3600); s -= h * 3600;
     var m = Math.floor(s / 60); s -= m * 60;
     var hh = d > 0 ? h + d * 24 : h;
-    return { text: SMP.pad(hh) + ':' + SMP.pad(m) + ':' + SMP.pad(s), days: d, hours: hh, minutes: m, seconds: s };
+    var text = (d > 0 ? d + 'd ' : '') + SMP.pad(h) + ':' + SMP.pad(m) + ':' + SMP.pad(s);
+    return { text: text, days: d, hours: hh, minutes: m, seconds: s };
+  };
+
+  // "2d 4h", "1:12:00:00" (days:hours:minutes:seconds), "36h", "90m", "12:00:00"
+  SMP.parseDuration = function (v) {
+    v = String(v || '').trim().toLowerCase();
+    if (!v) return null;
+    if (/^[\d.\s]*[a-z]/.test(v)) {
+      var total = 0, hit = false, re = /(\d+(?:\.\d+)?)\s*(d|h|m|s)[a-z]*/g, mt, rest = v;
+      while ((mt = re.exec(v))) {
+        hit = true;
+        total += parseFloat(mt[1]) * { d: 86400, h: 3600, m: 60, s: 1 }[mt[2]];
+        rest = rest.replace(mt[0], '');
+      }
+      return hit && !rest.trim() ? Math.round(total) : null;
+    }
+    var parts = v.split(':').map(Number);
+    if (parts.length > 4 || parts.some(function (n) { return isNaN(n); })) return null;
+    while (parts.length < 4) parts.unshift(0);
+    return parts[0] * 86400 + parts[1] * 3600 + parts[2] * 60 + parts[3];
+  };
+  SMP.fmtHours = function (hours) {
+    var d = Math.floor(hours / 24), h = Math.round((hours - d * 24) * 100) / 100;
+    return d ? d + (d === 1 ? ' day' : ' days') + (h ? ' ' + h + 'h' : '') : h + ' hours';
   };
 
   SMP.fmtDur = function (secs) {

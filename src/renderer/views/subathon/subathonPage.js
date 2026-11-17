@@ -104,16 +104,31 @@ const QUICK = [
 const STATUS_LABEL = { connected: 'Connected', connecting: 'Connecting…', reconnecting: 'Reconnecting…', error: 'Error', off: 'Off', disconnected: 'Not connected' };
 const toneOf = (s) => (s === 'connected' ? 'good' : s === 'error' ? 'bad' : s === 'connecting' || s === 'reconnecting' ? 'warn' : '');
 
-function parseHMS(v) {
-  v = String(v || '').trim();
+// "2d 4h", "36h", "90m", "12:00:00" or "1:12:00:00" (days:hours:minutes:seconds)
+export function parseHMS(v) {
+  v = String(v || '').trim().toLowerCase();
   if (!v) return null;
-  if (/^\d+(\.\d+)?h$/i.test(v)) return parseFloat(v) * 3600;
-  if (/^\d+(\.\d+)?m$/i.test(v)) return parseFloat(v) * 60;
+  if (/^[\d.\s]*[a-z]/.test(v)) {
+    let total = 0;
+    let rest = v;
+    let hit = false;
+    for (const m of v.matchAll(/(\d+(?:\.\d+)?)\s*(d|h|m|s)[a-z]*/g)) {
+      hit = true;
+      total += parseFloat(m[1]) * { d: 86400, h: 3600, m: 60, s: 1 }[m[2]];
+      rest = rest.replace(m[0], '');
+    }
+    return hit && !rest.trim() ? Math.round(total) : null;
+  }
   const parts = v.split(':').map(Number);
-  if (parts.length > 3 || parts.some((n) => isNaN(n))) return null;
-  while (parts.length < 3) parts.unshift(0);
-  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length > 4 || parts.some((n) => isNaN(n))) return null;
+  while (parts.length < 4) parts.unshift(0);
+  return parts[0] * 86400 + parts[1] * 3600 + parts[2] * 60 + parts[3];
 }
+const fmtHours = (hours) => {
+  const d = Math.floor(hours / 24);
+  const h = Math.round((hours - d * 24) * 100) / 100;
+  return d ? `${d} ${d === 1 ? 'day' : 'days'}${h ? ` ${h}h` : ''}` : `${h} hours`;
+};
 
 export function mountSubathonPage(root) {
   let S = null;
@@ -128,7 +143,7 @@ export function mountSubathonPage(root) {
   // ─── Skeleton ──────────────────────────────────────────────
   const headPills = h('div', { class: 'row' });
   const head = h('div', { class: 'page-head' },
-    h('div', {}, h('h1', {}, 'Subathon'), h('div', { class: 'sub' }, 'Countdown timer, TV screen, wake-up media menu and goals. Every sub, bit and donation adds time.')),
+    h('div', {}, h('h1', {}, 'Subathon'), h('div', { class: 'sub' }, 'Countdown timer, TV screen, wake-up media menu and goals.')),
     headPills);
   const tabBar = h('div', { class: 'tabs' });
   const sections = {};
@@ -180,12 +195,12 @@ export function mountSubathonPage(root) {
   const timerHint = h('div', { class: 'faint small' }, ' ');
   const btnStartPause = h('button', { class: 'primary', onclick: safe(() => api.post(A('/timer'), { action: S.timer.running ? 'pause' : 'start' })) }, 'Start timer');
   const adj = h('div', { class: 'row smp-adj' },
-    [[-3600, '−1h'], [-600, '−10m'], [-60, '−1m'], [60, '+1m'], [600, '+10m'], [3600, '+1h']].map(([s, t]) =>
+    [[-86400, '−1d'], [-3600, '−1h'], [-600, '−10m'], [-60, '−1m'], [60, '+1m'], [600, '+10m'], [3600, '+1h'], [86400, '+1d']].map(([s, t]) =>
       btn(t, safe(() => api.post(A('/timer'), { action: 'add', seconds: s })), 'sm' + (s > 0 ? ' smp-plus' : ''))));
-  const setTime = h('input', { type: 'text', placeholder: 'Set exact time, e.g. 12:00:00 or 12h' });
+  const setTime = h('input', { type: 'text', placeholder: 'Set exact time, e.g. 2d 6h, 36h or 12:00:00' });
   const doSet = safe(async () => {
     const secs = parseHMS(setTime.value);
-    if (secs == null) throw localErr('Use HH:MM:SS, e.g. 12:00:00');
+    if (secs == null) throw localErr('Try 2d 6h, 36h, 90m or 12:00:00');
     await api.post(A('/timer'), { action: 'set', seconds: secs });
     setTime.value = '';
     toast('Timer set to ' + fmtClock(secs * 1000).text);
@@ -214,7 +229,7 @@ export function mountSubathonPage(root) {
   const tvCard = card('On the TV', nowBox,
     h('div', { class: 'row' }, tvBtn('skip', 'Skip'), tvBtn('clear', 'Clear queue'), tvBtn('test-sound', 'Test sound')),
     h('div', { style: 'margin-top:12px' }, check(mediaPaused, 'Pause viewer-triggered media')),
-    hint("When paused, events still add time and show alerts, but sounds/videos won't play."));
+    hint("When paused, events still count and show alerts, but sounds/videos won't play."));
 
   const stSubs = h('b', {}, '0'), stBits = h('b', {}, '0'), stMoney = h('b', {}, '$0'), stTime = h('b', {}, '0m');
   const statTile = (ic, val, label, key) =>
@@ -746,7 +761,7 @@ export function mountSubathonPage(root) {
   }
   const runCheck = safe(async () => {
     const r = await api.post(A('/test-match'), { currency: mCur.value, amount: mAmount.value, message: mMsg.value });
-    if (!r.matched.length) put(matchOut, h('span', { class: 'faint' }, 'Nothing would play for this event (it still adds time).'));
+    if (!r.matched.length) put(matchOut, h('span', { class: 'faint' }, 'Nothing would play for this event (it still counts).'));
     else put(matchOut, h('span', { class: 'faint' }, 'Would play:'), ...r.matched.map((m) => h('span', { class: 'tag' }, '▶ ' + m.name)));
   });
   btnDemo.addEventListener('click', safe(async () => {
@@ -789,7 +804,7 @@ export function mountSubathonPage(root) {
     h('div', { class: 'grid2' },
       card('Simulate events',
         h('div', { class: 'grid2 smp-tight' }, field('Viewer name', tUser), field('Message (put trigger codes here)', tMsg)),
-        check(tReal, 'Count for real (adds time + stats)'),
+        check(tReal, 'Count for real (stats, and time if that is on)'),
         quickGrid,
         h('div', { class: 'divider' }),
         h('h3', {}, 'Custom event'),
@@ -1023,8 +1038,19 @@ export function mountSubathonPage(root) {
   const perDollarLbl = h('span', {}, 'Per $1 donated');
   timeInputs.perDollar = S$('number', { step: 'any', min: 0 });
   const sMult = S$('number', { step: 0.1, min: 0 });
-  const sInitial = S$('number', { step: 'any', min: 0 });
-  const sCap = S$('number', { step: 'any', min: 0 });
+  const sInitialD = S$('number', { step: 1, min: 0, placeholder: '0' });
+  const sInitial = S$('number', { step: 'any', min: 0, placeholder: '0' });
+  const sCapD = S$('number', { step: 1, min: 0, placeholder: '0' });
+  const sCap = S$('number', { step: 'any', min: 0, placeholder: '0' });
+  const sAddTime = S$('checkbox');
+  const dh = (d, hrs) => h('div', { class: 'row nowrap smp-dh' }, d, h('span', { class: 'faint small' }, 'days'), hrs, h('span', { class: 'faint small' }, 'hours'));
+  const splitHours = (total, dEl, hEl) => {
+    total = Number(total) || 0;
+    const d = Math.floor(total / 24);
+    dEl.value = d;
+    hEl.value = +(total - d * 24).toFixed(2);
+  };
+  const joinHours = (dEl, hEl) => Math.max(0, (Number(dEl.value) || 0) * 24 + (Number(hEl.value) || 0));
   const sPrefix = S$('text', { maxlength: 3 });
   const sCurrency = S$('text', { maxlength: 4 });
   const sMatch = h('select', {}, h('option', { value: 'exact' }, 'Play media whose price matches the amount exactly'), h('option', { value: 'tier' }, 'Play the most expensive media the amount covers'));
@@ -1085,6 +1111,12 @@ export function mountSubathonPage(root) {
     }, h('i', { style: 'background:' + a }), h('i', { style: 'background:' + b })));
   }
   sVolume.addEventListener('input', () => (volLbl.textContent = sVolume.value + '%'));
+  function showRates() {
+    const wrap = sAddTime.closest && sAddTime.closest('.card');
+    const rates = wrap && wrap.querySelector('.smp-rates');
+    if (rates) rates.classList.toggle('smp-dim', !sAddTime.checked);
+  }
+  sAddTime.addEventListener('change', showRates);
   const showProvider = () => {
     const p = sProvider.value;
     provSl.hidden = p !== 'streamlabs';
@@ -1098,15 +1130,18 @@ export function mountSubathonPage(root) {
       card('Twitch', field('Twitch channel', sChannel), channelHelp),
       card('Donations', field('Donation service', sProvider), provSl, provSe, provKofi, hint('Tokens stay on your computer and are never shown to viewers.'))),
     card('Time rules',
-      h('p', { class: 'muted', style: 'margin-top:0' }, 'How much time each thing adds to the clock (in minutes).'),
-      h('div', { class: 'smp-grid4' },
+      check(sAddTime, h('b', {}, 'Subs, bits, donations and TikTok gifts add time to the countdown')),
+      hint('Off by default: support still counts toward stats and goals, shows alerts and plays sounds, but the clock only changes when you add time yourself. Turn it on to use the amounts below.'),
+      h('p', { class: 'muted' }, 'How much time each thing adds to the clock (in minutes).'),
+      h('div', { class: 'smp-grid4 smp-rates' },
         timeField('prime', 'Prime sub'), timeField('tier1', 'Tier 1 sub'), timeField('tier2', 'Tier 2 sub'), timeField('tier3', 'Tier 3 sub'),
         timeField('per100Bits', 'Per 100 bits'),
         timeField('per100Coins', 'Per 100 TikTok coins'),
         h('label', { class: 'field' }, perDollarLbl, timeInputs.perDollar),
-        field('Multiplier (happy hour)', sMult, '2 = double time'),
-        field('Starting time (hours)', sInitial, 'Used when you reset the timer'),
-        field('Max length (hours)', sCap, '0 = no cap'))),
+        field('Multiplier (happy hour)', sMult, '2 = double time')),
+      h('div', { class: 'grid2', style: 'margin-top:12px' },
+        field('Starting time', dh(sInitialD, sInitial), 'Used when you reset the timer'),
+        field('Max length', dh(sCapD, sCap), 'Longest the subathon can run with added time. 0 = no limit'))),
     h('div', { class: 'grid2' },
       card('Triggers',
         h('div', { class: 'grid2 smp-tight' }, field('Code prefix', sPrefix, 'Viewers type this before a code, e.g. #horn'), field('Currency symbol', sCurrency)),
@@ -1125,8 +1160,8 @@ export function mountSubathonPage(root) {
         field('Public address (optional)', sPublicUrl, 'If the app is online (tunnel or your own domain), paste its address so the dashboard shows the right viewer link.'))),
     fxCard,
     card('TikTok gifts',
-      check(sTkEnabled, 'TikTok gifts count toward the subathon (time, stats, alerts, sounds)'),
-      field('Only show an alert for gifts worth at least (coins)', sTkMin, 'Smaller gifts still add time — they just don’t pop up on the TV. Gifts set up on Media & prices always alert.')),
+      check(sTkEnabled, 'TikTok gifts count toward the subathon (stats, alerts, sounds, and time if that is on)'),
+      field('Only show an alert for gifts worth at least (coins)', sTkMin, 'Smaller gifts still count — they just don’t pop up on the TV. Gifts set up on Media & prices always alert.')),
     h('div', { class: 'grid2' },
       card('Remote dashboard password',
         h('p', { class: 'muted', style: 'margin-top:0' }, 'The same dashboard also runs on your network at /admin, so you can run the subathon from your phone or another PC. It needs a password; Steez itself never asks for it.'),
@@ -1142,7 +1177,7 @@ export function mountSubathonPage(root) {
       h('div', { class: 'card smp-danger' }, h('h3', {}, 'Reset'),
         h('div', { class: 'row' },
           btn('Reset timer to starting time', safe(async () => {
-            if (!confirm('Reset the timer to ' + S.settings.time.initialHours + ' hours and stop it?')) return;
+            if (!confirm('Reset the timer to ' + fmtHours(S.settings.time.initialHours) + ' and stop it?')) return;
             await api.post(A('/timer'), { action: 'reset' });
             toast('Timer reset');
           }), 'danger'),
@@ -1191,8 +1226,10 @@ export function mountSubathonPage(root) {
     sKofiToken.value = s.donation.kofiToken || '';
     for (const [k, el] of Object.entries(timeInputs)) el.value = +((s.time[k] || 0) / 60).toFixed(2);
     sMult.value = s.time.multiplier;
-    sInitial.value = s.time.initialHours;
-    sCap.value = s.time.capHours;
+    splitHours(s.time.initialHours, sInitialD, sInitial);
+    splitHours(s.time.capHours, sCapD, sCap);
+    sAddTime.checked = s.time.eventsAddTime === true;
+    showRates();
     sPrefix.value = s.triggerPrefix;
     sCurrency.value = s.currencySymbol;
     sMatch.value = s.matchMode;
@@ -1229,7 +1266,7 @@ export function mountSubathonPage(root) {
     const p = sProvider.value;
     const time = {};
     for (const [k, el] of Object.entries(timeInputs)) time[k] = Math.round(Number(el.value || 0) * 60);
-    Object.assign(time, { multiplier: Number(sMult.value || 1), initialHours: Number(sInitial.value || 0), capHours: Number(sCap.value || 0) });
+    Object.assign(time, { multiplier: Number(sMult.value || 1), initialHours: joinHours(sInitialD, sInitial), capHours: joinHours(sCapD, sCap), eventsAddTime: sAddTime.checked });
     const body = {
       channel: sChannel.value, title: sTitle.value, accent: sAccent.value, accent2: sAccent2.value,
       triggerPrefix: sPrefix.value, currencySymbol: sCurrency.value, matchMode: sMatch.value, publicUrl: sPublicUrl.value,

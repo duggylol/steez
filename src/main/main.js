@@ -127,6 +127,12 @@ async function startCore() {
   await startBot({ openUrl: (url) => shell.openExternal(url) });
   features = createFeatures({ onChange: (list) => send('steez:features', list), log });
   registerBotFeatures(features, { db, save: saveBotDb, bot });
+  {
+    // Import accounts: StreamElements / Streamlabs points, commands, timers, quotes
+    const { registerAccountImport } = await import('./accounts/index.js');
+    const { flush: flushBotDb } = await import('./bot/store.js');
+    registerAccountImport({ ipcMain, parent: () => win, send, log, bot, db, flush: flushBotDb, dataDir: process.env.STEEZ_BOT_DATA });
+  }
 
   // Import a still-valid SongSeek Twitch login so returning users are connected immediately.
   if (!db.auth.broadcaster && !steez.get('importsDone').songseekTwitch && songseek?.data?.twitchTokens?.access_token) {

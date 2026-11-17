@@ -12,6 +12,7 @@ const MusicView = lazy(() => import('./views/music/MusicView.jsx'));
 const QueueView = lazy(() => import('./views/queue/QueueView.jsx'));
 const GiftsView = lazy(() => import('./views/queue/GiftsView.jsx'));
 const SubathonPage = lazy(() => import('./views/subathon/SubathonPage.jsx'));
+const ImportAccounts = lazy(() => import('./views/ImportAccounts.jsx'));
 
 export const NAV = [
   { group: 'Live', items: [{ id: 'home', label: 'Dashboard', icon: 'home' }] },
@@ -53,6 +54,7 @@ export const NAV = [
   {
     group: 'System',
     items: [
+      { id: 'import', label: 'Import Accounts', icon: 'download' },
       { id: 'settings', label: 'Settings', icon: 'cog' },
       { id: 'logs', label: 'Logs', icon: 'log' },
     ],
@@ -152,6 +154,7 @@ export default function App() {
   else if (page.id === 'gifts') view = <GiftsView />;
   else if (page.id === 'subathon') view = <SubathonPage />;
   else if (page.id === 'overlays') view = <Overlays />;
+  else if (page.id === 'import') view = <ImportAccounts go={go} />;
   else if (page.id === 'settings') view = <Settings twitch={twitch} update={update} />;
   else if (BOT_PAGES.has(page.id)) view = <BotPage key={page.id} id={page.id} />;
 

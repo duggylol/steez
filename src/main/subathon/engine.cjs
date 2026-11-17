@@ -246,7 +246,7 @@ function createSubathon(opts) {
     return {
       title: s.title, accent: s.accent, accent2: s.accent2, currencySymbol: s.currencySymbol,
       triggerPrefix: s.triggerPrefix, matchMode: s.matchMode, channel: effectiveChannel(), viewer: s.viewer,
-      time: { prime: s.time.prime, tier1: s.time.tier1, tier2: s.time.tier2, tier3: s.time.tier3, per100Bits: s.time.per100Bits, perDollar: s.time.perDollar, per100Coins: s.time.per100Coins, multiplier: s.time.multiplier },
+      time: { prime: s.time.prime, tier1: s.time.tier1, tier2: s.time.tier2, tier3: s.time.tier3, per100Bits: s.time.per100Bits, perDollar: s.time.perDollar, per100Coins: s.time.per100Coins, multiplier: s.time.multiplier, eventsAddTime: s.time.eventsAddTime === true },
       donationsEnabled: s.donation.provider !== 'none', mediaPaused: s.mediaPaused,
       tiktokEnabled: s.tiktok.enabled !== false && D().tiktokRules.some((r) => r.enabled !== false),
       overlay: s.overlay,
@@ -572,10 +572,14 @@ function createSubathon(opts) {
       if (real) st.tiktokCoins = (st.tiktokCoins || 0) + coins;
     } else return null;
 
+    // Events only add time when the streamer has turned that on (they still count, alert and play media).
+    const addsTime = s.time.eventsAddTime === true;
+    if (!addsTime) secs = 0;
+
     if (real) added = addEventTime(secs);
     else added = Math.round(secs * (Number(s.time.multiplier) || 1));
 
-    if (ev.type === 'giftbomb' && !o.test) {
+    if (ev.type === 'giftbomb' && !o.test && addsTime) {
       // Estimate for the alert; the real time is added by the individual gifts.
       added = Math.round((Number(s.time[ev.tier]) || s.time.tier1) * ev.amount * (Number(s.time.multiplier) || 1));
     }
@@ -681,6 +685,7 @@ function createSubathon(opts) {
     if (i.time) {
       for (const k of ['prime', 'tier1', 'tier2', 'tier3', 'per100Bits', 'perDollar', 'per100Coins']) s.time[k] = num(i.time[k], s.time[k], 0, 86400 * 7);
       s.time.multiplier = num(i.time.multiplier, s.time.multiplier, 0, 100);
+      if (typeof i.time.eventsAddTime === 'boolean') s.time.eventsAddTime = i.time.eventsAddTime;
       s.time.capHours = num(i.time.capHours, s.time.capHours, 0, 24 * 365);
       s.time.initialHours = num(i.time.initialHours, s.time.initialHours, 0, 24 * 365);
     }

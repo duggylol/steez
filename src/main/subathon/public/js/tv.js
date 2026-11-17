@@ -67,10 +67,11 @@
     var c = SMP.fmtClock(rem);
     var el = $('timer');
     el.textContent = c.text;
+    var base = 'timer mono' + (c.days ? ' days' : '');
     if (fromUpdate && lastRem != null && rem > lastRem + 1500) {
-      el.className = 'timer mono'; void el.offsetWidth; el.className = 'timer mono bump';
-    } else if (rem < 5 * 60000 && t.running) el.className = 'timer mono low';
-    else if (el.className.indexOf('bump') < 0) el.className = 'timer mono';
+      el.className = base; void el.offsetWidth; el.className = base + ' bump';
+    } else if (rem < 5 * 60000 && t.running) el.className = base + ' low';
+    else if (el.className.indexOf('bump') < 0) el.className = base;
     lastRem = rem;
     $('paused').hidden = t.running || t.ended || rem === 0;
     $('ended').hidden = !t.ended;

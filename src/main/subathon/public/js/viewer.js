@@ -29,7 +29,9 @@
     const t = S.timer;
     const rem = SMP.remaining(t, conn);
     const el = $('timer');
-    el.textContent = SMP.fmtClock(rem).text;
+    var c = SMP.fmtClock(rem);
+    el.textContent = c.text;
+    el.classList.toggle('days', c.days > 0);
     if (fromUpdate && lastRem != null && rem > lastRem + 1500) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
     lastRem = rem;
     const pill = $('statePill');
@@ -53,6 +55,8 @@
     const s = S.settings, t = s.time, box = $('rules');
     box.innerHTML = '';
     const mult = Number(t.multiplier) || 1;
+    if (!t.eventsAddTime) { box.hidden = true; return; }
+    box.hidden = false;
     if (mult !== 1) box.appendChild(h('span', { class: 'chip mult', text: '⚡ ' + mult + '× TIME RIGHT NOW' }));
     const add = (cls, icon, text) => box.appendChild(h('span', { class: 'chip ' + cls, html: SMP.icons[icon] + text }));
     if (t.tier1) add('subs', 'sub', '1 sub = +' + SMP.fmtDur(t.tier1));
