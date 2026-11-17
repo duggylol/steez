@@ -339,7 +339,19 @@
       setTimeout(connect, Math.min(15000, 800 * Math.pow(1.7, retry++)));
     };
   }
-  connect();
+  // ?demo=1 — sample menu for the previews in Steez (never connects).
+  if (params.get('demo')) {
+    S = {
+      settings: { accent: '#a970ff', accent2: '#00e5ff', currencySymbol: '$', triggerPrefix: '#', donationsEnabled: true, overlay: { style: params.get('style') || 'steez', interval: 3, header: 'WAKE-UP MENU' } },
+      media: [
+        { id: 'd1', type: 'audio', name: 'Air horn', description: 'Blasts an air horn on stream', code: 'horn', prices: { bits: 100 } },
+        { id: 'd2', type: 'video', name: 'Jump scare', description: 'Plays a jump scare on the TV', code: 'scare', prices: { subs: 1, donation: 5 } },
+        { id: 'd3', type: 'audio', name: 'Wake up!', description: 'Alarm clock at full volume', code: 'wake', prices: { bits: 500 }, tiktok: [{ gift: 'Rose', minCount: 5 }] },
+        { id: 'd4', type: 'image', name: 'Cat tax', description: 'A cat photo fills the screen', code: 'cat', prices: { donation: 2 } }
+      ]
+    };
+    render();
+  } else connect();
 })();
 </script>
 </body>

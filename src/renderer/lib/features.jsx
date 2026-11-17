@@ -94,46 +94,41 @@ export function FeatureBanner({ page }) {
 export function FeaturesPanel({ go }) {
   const list = useFeatures();
   if (!list.length) return null;
-  const groups = {};
-  for (const g of ['Features', 'Chat bot']) groups[g] = [];
-  for (const f of list) (groups[f.group] ||= []).push(f);
-  for (const g of Object.keys(groups)) if (!groups[g].length) delete groups[g];
+  // Song requests, queue, TikTok and subathon first, then the chat bot's parts — one even grid.
+  const order = ['Features', 'Chat bot'];
+  const sorted = [...list].sort((a, b) => (order.indexOf(a.group) + 1 || 9) - (order.indexOf(b.group) + 1 || 9));
   const on = list.filter((f) => f.on).length;
   return (
-    <Panel title="Features" actions={<span className="faint small">{on ? `${on} of ${list.length} on` : 'Everything is off — turn on what you want'}</span>}>
+    <Panel title="Features" actions={<span className="faint small">{on ? `${on} of ${list.length} on` : 'Everything is off. Turn on what you want.'}</span>}>
       <div className="features-grid">
-        {Object.entries(groups).map(([group, items]) => (
-          <div key={group} className="features-group">
-            <div className="faint small features-group-title">{group}</div>
-            {items.map((f) => {
-              const needs = f.needs && list.find((x) => x.id === f.needs);
-              return (
-                <div key={f.id} className={`feature-row ${f.on ? 'on' : ''}`}>
-                  <Toggle value={f.on} onChange={(v) => setFeature(f.id, v)} />
-                  <div className="grow">
-                    <div className="row nowrap" style={{ gap: 8 }}>
-                      <b>{f.name}</b>
-                      {f.on && needs && !needs.on && <span className="pill warn">Needs {needs.name}</span>}
-                    </div>
-                    <div className="faint small">{f.description}</div>
-                  </div>
-                  {f.page && (
-                    <button className="sm" onClick={() => go(f.page)}>
-                      Open
-                    </button>
-                  )}
+        {sorted.map((f) => {
+          const needs = f.needs && list.find((x) => x.id === f.needs);
+          return (
+            <div key={f.id} className={`feature-row ${f.on ? 'on' : ''}`}>
+              <Toggle value={f.on} onChange={(v) => setFeature(f.id, v)} />
+              <div className="grow">
+                <div className="row nowrap" style={{ gap: 8 }}>
+                  <b>{f.name}</b>
+                  {f.on && needs && !needs.on && <span className="pill warn">Needs {needs.name}</span>}
                 </div>
-              );
-            })}
-          </div>
-        ))}
+                <div className="faint small">{f.description}</div>
+              </div>
+              {f.page && (
+                <button className="sm ghost" onClick={() => go(f.page)} title={`Open ${f.name}`}>
+                  Open
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
       <style>{`
-        .features-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
-        .features-group-title { text-transform: uppercase; letter-spacing: .12em; margin: 4px 0 6px; }
-        .feature-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+        .feature-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.015); }
+        .feature-row .toggle { margin-top: 2px; }
+        .feature-row.on { border-color: rgba(143, 124, 255, 0.35); background: var(--accent-soft); }
         .feature-row:not(.on) b { color: var(--text-2); }
-        @media (max-width: 1200px) { .features-grid { grid-template-columns: 1fr; } }
+        .feature-row .faint.small { margin-top: 2px; line-height: 1.45; }
       `}</style>
     </Panel>
   );

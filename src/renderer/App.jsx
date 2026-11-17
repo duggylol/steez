@@ -7,6 +7,7 @@ import Settings from './views/Settings.jsx';
 import Overlays from './views/Overlays.jsx';
 import MusicEngine from './views/music/MusicEngine.jsx';
 import { FeatureBanner, useFeatures, PAGE_FEATURE, refreshFeatures } from './lib/features.jsx';
+import { SearchLauncher, SearchPalette } from './Search.jsx';
 
 const MusicView = lazy(() => import('./views/music/MusicView.jsx'));
 const QueueView = lazy(() => import('./views/queue/QueueView.jsx'));
@@ -14,56 +15,67 @@ const GiftsView = lazy(() => import('./views/queue/GiftsView.jsx'));
 const SubathonPage = lazy(() => import('./views/subathon/SubathonPage.jsx'));
 const ImportAccounts = lazy(() => import('./views/ImportAccounts.jsx'));
 
+// Grouped by what you're doing, not by how Steez is built.
 export const NAV = [
-  { group: 'Live', items: [{ id: 'home', label: 'Dashboard', icon: 'home' }] },
+  { group: 'Home', items: [{ id: 'home', label: 'Dashboard', icon: 'home' }] },
   {
-    group: 'Features',
+    group: 'On stream',
     items: [
-      { id: 'music', label: 'Song Requests', icon: 'music' },
-      { id: 'queue', label: 'Viewer Queue', icon: 'queue' },
-      { id: 'gifts', label: 'TikTok Gifts', icon: 'tiktok' },
+      { id: 'overlays', label: 'OBS Overlays', icon: 'layers' },
+      { id: 'alerts', label: 'Alerts & Events', icon: 'bell' },
       { id: 'subathon', label: 'Subathon', icon: 'hourglass' },
+      { id: 'shop', label: 'Shop & Effects', icon: 'bag' },
+      { id: 'hype', label: 'Hype & Clips', icon: 'fire' },
     ],
   },
   {
-    group: 'Chat bot',
+    group: 'Chat',
     items: [
       { id: 'commands', label: 'Commands', icon: 'terminal' },
       { id: 'timers', label: 'Timers', icon: 'clock' },
-      { id: 'moderation', label: 'Moderation', icon: 'shield' },
-      { id: 'loyalty', label: 'Points & Viewers', icon: 'coin' },
-      { id: 'games', label: 'Games', icon: 'dice' },
-      { id: 'giveaways', label: 'Giveaways', icon: 'gift' },
-      { id: 'polls', label: 'Polls & Bets', icon: 'chart' },
       { id: 'quotes', label: 'Quotes', icon: 'quote' },
-      { id: 'achievements', label: 'Achievements', icon: 'trophy' },
       { id: 'ai', label: 'AI', icon: 'spark' },
+      { id: 'moderation', label: 'Moderation', icon: 'shield' },
       { id: 'modpanel', label: 'Mod Panel', icon: 'users' },
     ],
   },
   {
-    group: 'Stream',
+    group: 'Viewers',
     items: [
-      { id: 'alerts', label: 'Alerts & Events', icon: 'bell' },
-      { id: 'shop', label: 'Shop & Effects', icon: 'bag' },
-      { id: 'hype', label: 'Hype & Clips', icon: 'fire' },
-      { id: 'analytics', label: 'Analytics', icon: 'chart' },
-      { id: 'overlays', label: 'OBS Overlays', icon: 'layers' },
+      { id: 'loyalty', label: 'Points & Viewers', icon: 'coin' },
+      { id: 'games', label: 'Games', icon: 'dice' },
+      { id: 'giveaways', label: 'Giveaways', icon: 'gift' },
+      { id: 'polls', label: 'Polls & Bets', icon: 'chart' },
+      { id: 'achievements', label: 'Achievements', icon: 'trophy' },
+      { id: 'queue', label: 'Viewer Queue', icon: 'queue' },
     ],
   },
   {
-    group: 'System',
+    group: 'Music & TikTok',
+    items: [
+      { id: 'music', label: 'Song Requests', icon: 'music' },
+      { id: 'gifts', label: 'TikTok Gifts', icon: 'tiktok' },
+    ],
+  },
+  {
+    group: 'Insights',
+    items: [
+      { id: 'analytics', label: 'Analytics', icon: 'chart' },
+      { id: 'logs', label: 'Logs', icon: 'log' },
+    ],
+  },
+  {
+    group: 'Setup',
     items: [
       { id: 'import', label: 'Import Accounts', icon: 'download' },
       { id: 'settings', label: 'Settings', icon: 'cog' },
-      { id: 'logs', label: 'Logs', icon: 'log' },
     ],
   },
 ];
 const ALL = NAV.flatMap((g) => g.items);
 const BOT_PAGES = new Set(['commands', 'timers', 'moderation', 'loyalty', 'games', 'giveaways', 'polls', 'quotes', 'achievements', 'ai', 'modpanel', 'alerts', 'shop', 'hype', 'analytics', 'logs']);
 
-function TitleBar({ page, twitch, update }) {
+function TitleBar({ twitch, update, onSearch }) {
   const [max, setMax] = useState(false);
   useEffect(() => {
     window.steez.win.isMaximized().then(setMax);
@@ -73,9 +85,11 @@ function TitleBar({ page, twitch, update }) {
     <div className="titlebar">
       <div className="brand">
         <span className={`dot ${twitch?.connected ? 'on' : ''}`} />
-        STEEZ
+        Steez
       </div>
-      <div className="crumbs">{page?.label}</div>
+      <div className="crumbs">
+        <SearchLauncher onOpen={onSearch} />
+      </div>
       <div className="chips">
         {update?.status === 'ready' && (
           <button className="sm primary" onClick={() => window.steez.update.install()}>
@@ -120,6 +134,38 @@ export default function App() {
   const [twitch, setTwitch] = useState(null);
   const [update, setUpdate] = useState(null);
   const [version, setVersion] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [closed, setClosed] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('steez.nav.closed') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const toggleGroup = (g) => {
+    const next = closed.includes(g) ? closed.filter((x) => x !== g) : [...closed, g];
+    setClosed(next);
+    try {
+      localStorage.setItem('steez.nav.closed', JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+  // Ctrl+K (or /) opens search from anywhere.
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(input|textarea|select)$/i.test(e.target?.tagName || '') || e.target?.isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearching(true);
+      } else if (e.key === '/' && !typing) {
+        e.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const onHash = () => setRoute(location.hash.slice(1) || 'home');
@@ -160,12 +206,19 @@ export default function App() {
 
   return (
     <div className="app">
-      <TitleBar page={page} twitch={twitch} update={update} />
+      <TitleBar twitch={twitch} update={update} onSearch={() => setSearching(true)} />
       <div className="body">
         <nav className="sidebar">
           {NAV.map((g) => (
-            <div className="group" key={g.group}>
-              <div className="group-label">{g.group}</div>
+            <div className={`group ${closed.includes(g.group) && !g.items.some((it) => it.id === page.id) ? 'closed' : ''}`} key={g.group}>
+              {g.group !== 'Home' && (
+                <div className="group-label" onClick={() => toggleGroup(g.group)} title={closed.includes(g.group) ? 'Show' : 'Hide'}>
+                  {g.group}
+                  <svg viewBox="0 0 12 12">
+                    <path d="M3 4.5 6 7.5 9 4.5" />
+                  </svg>
+                </div>
+              )}
               {g.items.map((it) => (
                 <div key={it.id} className={`item ${page.id === it.id ? 'active' : ''} ${isOff(it.id) ? 'off' : ''}`} onClick={() => go(it.id)} title={isOff(it.id) ? 'Turned off' : undefined}>
                   <Icon name={it.icon} />
@@ -186,6 +239,7 @@ export default function App() {
         </main>
       </div>
       <MusicEngine go={go} />
+      <SearchPalette open={searching} onClose={() => setSearching(false)} />
       <Toaster />
     </div>
   );

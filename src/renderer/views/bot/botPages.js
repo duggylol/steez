@@ -2,6 +2,7 @@
 // All user data is inserted as text nodes — never innerHTML.
 import { toast as uiToast } from '../../ui.jsx';
 import { api, buffers, onBot } from '../../lib/bot.js';
+import { labelOf } from '../../lib/search.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -47,7 +48,7 @@ const dur = (ms) => {
   const m = Math.floor(ms / 60000);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 };
-const label = (k) => k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+const label = (k) => labelOf(k);
 const card = (title, ...kids) => h('div', { class: 'card' }, title && h('h3', {}, title), ...kids);
 const btn = (text, onclick, cls = '') => h('button', { class: cls, onclick }, text);
 const copy = (text) => window.steez.copy(text).then(() => toast('Copied'));
@@ -57,7 +58,7 @@ let S = null; // server state
 let hypeNow = { mpm: 0, level: 0, score: 0 };
 
 // ─── Generic settings forms ──────────────────────────────────
-const HELP = {
+export const HELP = {
   'general.prefix': 'Character that starts commands.',
   'general.replyStyle': '"mention" (@user ...) or "reply" (native Twitch reply thread).',
   'general.regulars': 'One username per line — these users get the "regular" level.',
@@ -160,9 +161,9 @@ function field(obj, key, path) {
   const v = obj[key];
   const help = HELP[path] && h('div', { class: 'help' }, HELP[path]);
   if (typeof v === 'boolean')
-    return h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: v, onchange: (e) => (obj[key] = e.target.checked) }), h('span', {}, label(key)), help);
+    return h('label', { class: 'check', 'data-path': path }, h('input', { type: 'checkbox', checked: v, onchange: (e) => (obj[key] = e.target.checked) }), h('span', {}, label(key)), help);
   if (typeof v === 'number')
-    return h('label', { class: 'field' }, h('span', {}, label(key)), h('input', { type: 'number', step: 'any', value: v, oninput: (e) => (obj[key] = Number(e.target.value)) }), help);
+    return h('label', { class: 'field', 'data-path': path }, h('span', {}, label(key)), h('input', { type: 'number', step: 'any', value: v, oninput: (e) => (obj[key] = Number(e.target.value)) }), help);
   if (typeof v === 'string') {
     let input;
     if (SELECTS[path]) {
@@ -173,20 +174,41 @@ function field(obj, key, path) {
     else if (/level$/i.test(key)) input = h('select', { onchange: (e) => (obj[key] = e.target.value) }, S.levels.map((l) => h('option', { value: l, selected: v === l }, l)));
     else if (/message|personality|response/i.test(key) || v.length > 70) input = h('textarea', { oninput: (e) => (obj[key] = e.target.value) }, v);
     else input = h('input', { value: v, oninput: (e) => (obj[key] = e.target.value) });
-    return h('label', { class: 'field' }, h('span', {}, label(key)), input, help);
+    return h('label', { class: 'field', 'data-path': path }, h('span', {}, label(key)), input, help);
   }
   if (Array.isArray(v)) {
-    if (TEMPLATES[path] || (v.length && typeof v[0] === 'object')) return h('div', { class: 'sub-group' }, h('div', { class: 'sg-title' }, label(key)), objTable(v, path), help);
+    if (TEMPLATES[path] || (v.length && typeof v[0] === 'object')) return h('div', { class: 'sub-group', 'data-path': path }, h('div', { class: 'sg-title' }, label(key)), objTable(v, path), help);
     return h(
       'label',
-      { class: 'field' },
+      { class: 'field', 'data-path': path },
       h('span', {}, `${label(key)} (one per line)`),
       h('textarea', { oninput: (e) => (obj[key] = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)) }, v.join('\n')),
       help,
     );
   }
-  if (v && typeof v === 'object') return h('div', { class: 'sub-group' }, h('div', { class: 'sg-title' }, label(key)), Object.keys(v).map((k) => field(v, k, `${path}.${k}`)), help);
+  if (v && typeof v === 'object') return h('div', { class: 'sub-group', 'data-path': path }, h('div', { class: 'sg-title' }, label(key)), arrange(Object.keys(v).map((k) => field(v, k, `${path}.${k}`))), help);
   return null;
+}
+
+/**
+ * Lay out a list of fields evenly: on/off checkboxes together in one row, then a grid of the
+ * short inputs, then long ones (text areas, lists) full width, then nested groups side by side.
+ */
+function arrange(parts) {
+  parts = parts.filter(Boolean);
+  const isCheck = (p) => p.matches('label.check');
+  const isGroup = (p) => p.matches('.sub-group');
+  const isLong = (p) => !!p.querySelector('textarea') || p.matches('.obj-wrap');
+  const checks = parts.filter(isCheck);
+  const groups = parts.filter(isGroup);
+  const long = parts.filter((p) => !isCheck(p) && !isGroup(p) && isLong(p));
+  const short = parts.filter((p) => !isCheck(p) && !isGroup(p) && !isLong(p));
+  return [
+    checks.length ? h('div', { class: 'check-row' }, checks) : null,
+    short.length ? h('div', { class: 'form-grid' }, short) : null,
+    long,
+    groups.length ? h('div', { class: 'group-grid' }, groups) : null,
+  ];
 }
 
 function settingsForm(section, { title, keys, extra, onSaved } = {}) {
@@ -201,7 +223,7 @@ function settingsForm(section, { title, keys, extra, onSaved } = {}) {
   };
   return card(
     title || label(section),
-    isArr ? objTable(data, section) : ks.map((k) => field(data, k, `${section}.${k}`)),
+    isArr ? objTable(data, section) : arrange(ks.map((k) => field(data, k, `${section}.${k}`))),
     h('div', { class: 'row', style: 'margin-top:8px' }, btn('Save', save, 'primary'), extra),
   );
 }

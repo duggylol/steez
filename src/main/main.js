@@ -66,7 +66,7 @@ function createSplash() {
     fullscreenable: false,
     show: false,
     center: true,
-    backgroundColor: '#141414',
+    backgroundColor: '#0b0c12',
     title: 'Steez',
     icon: path.join(ROOT, 'build', 'icon.png'),
     webPreferences: { contextIsolation: true, nodeIntegration: false },
@@ -264,7 +264,7 @@ async function createWindow() {
     minHeight: 680,
     frame: false,
     show: false,
-    backgroundColor: '#161616',
+    backgroundColor: '#0b0c12',
     title: 'Steez',
     icon: path.join(ROOT, 'build', 'icon.png'),
     webPreferences: {

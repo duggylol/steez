@@ -306,7 +306,18 @@ const PAGE = `<!doctype html>
   })
   window.addEventListener('online', () => schedule(0))
 
-  connect()
+  // ?demo=1 — sample songs for the previews in Steez (never connects).
+  if (new URLSearchParams(location.search).get('demo')) {
+    const songs = [
+      { title: 'Midnight City', artist: 'M83', requestedBy: 'NightOwl' },
+      { title: 'Blinding Lights', artist: 'The Weeknd', requestedBy: 'PixelPanda' },
+      { title: 'Feel Good Inc.', artist: 'Gorillaz', requestedBy: 'Kappa_Kid' }
+    ]
+    let n = 0
+    const next = () => show(songs[n++ % songs.length])
+    next()
+    setInterval(next, 6000)
+  } else connect()
 </script>
 </body>
 </html>`;

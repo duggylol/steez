@@ -15,21 +15,24 @@ export default function Home({ go }) {
       <div className="home-shortcuts">
         {SHORTCUTS.map((s) => (
           <button key={s.id} className="home-tile" onClick={() => go(s.id)}>
-            <Icon name={s.icon} size={18} />
+            <span className="ic">
+              <Icon name={s.icon} size={18} />
+            </span>
             <b>{s.title}</b>
-            <span>{s.text}</span>
+            <span className="d">{s.text}</span>
           </button>
         ))}
       </div>
       <FeaturesPanel go={go} />
       <BotPage id="overview" />
       <style>{`
-        .home-shortcuts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 20px; }
-        .home-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; white-space: normal; background: var(--surface); border: 0; padding: 14px 16px; }
-        .home-tile:hover { background: var(--surface-2); border: 0; }
-        .home-tile svg { color: var(--text-2); }
-        .home-tile b { font-size: 13px; }
-        .home-tile span { color: var(--text-3); font-size: 11.5px; line-height: 1.4; }
+        .home-shortcuts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+        .home-tile { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; row-gap: 3px; align-items: start; text-align: left; white-space: normal; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; }
+        .home-tile:hover { background: var(--surface-2); border-color: var(--line-2); }
+        .home-tile .ic { grid-row: span 2; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-hi); }
+        .home-tile .ic svg { width: 18px; height: 18px; }
+        .home-tile b { font-size: 14px; font-weight: 600; }
+        .home-tile span.d { color: var(--text-3); font-size: 12.5px; line-height: 1.45; }
         @media (max-width: 1200px) { .home-shortcuts { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
     </>

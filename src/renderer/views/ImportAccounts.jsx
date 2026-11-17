@@ -334,7 +334,7 @@ function Result({ r, go }) {
 const CSS = `
   .imp-stats .stat { min-width: 96px; }
   .imp-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
-  .imp-h { text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px; }
+  .imp-h { margin-bottom: 2px; }
   .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   a.link { cursor: pointer; text-decoration: underline; }
 `;

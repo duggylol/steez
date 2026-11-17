@@ -1,4 +1,4 @@
-/* Song Requests — built on steez.css tokens only. Square, 1px lines, greys, no gradients. */
+/* Song Requests — built on steez.css tokens. */
 
 /* ─── Layout ───────────────────────────────────────────────────── */
 .mu-layout {
@@ -29,8 +29,8 @@
 /* ─── Search ───────────────────────────────────────────────────── */
 .mu-search { position: relative; margin-bottom: 14px; }
 .mu-search-input { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: var(--bg-sunk); border: 1px solid var(--line-2); color: var(--text-3); transition: border-color .1s; }
-.mu-search-input:hover { border-color: #474747; }
-.mu-search-input:focus-within { border-color: #6a6a6a; }
+.mu-search-input:hover { border-color: #393b4f; }
+.mu-search-input:focus-within { border-color: var(--accent); }
 .mu-search-input svg { width: 15px; height: 15px; flex: none; }
 .mu-search-input input { border: 0; background: transparent; padding: 0; height: 100%; font-size: 13.5px; }
 .mu-search-input input:focus-visible { outline: none; }
@@ -41,7 +41,7 @@
 
 /* ─── Popovers (device picker, search) ─────────────────────────── */
 .mu-pop { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 20; min-width: 250px; padding: 4px 0; background: var(--surface-2); border: 1px solid var(--line-2); animation: muFade .12s ease-out; }
-.mu-pop-label { padding: 8px 12px 4px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.mu-pop-label { padding: 8px 12px 4px; font-size: 12px; color: var(--text-3); font-weight: 600; }
 .mu-pop-hint { padding: 10px 12px; color: var(--text-3); }
 .mu-pop-item { display: flex; width: 100%; gap: 10px; justify-content: flex-start; text-align: left; padding: 7px 12px; border: 0; background: transparent; }
 .mu-pop-item:hover { background: var(--hover); border: 0; }
@@ -92,14 +92,14 @@
 .mu-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mu-row-sub { color: var(--text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mu-row-tags { margin-top: 3px; }
-.mu-row-tags .tag { font-size: 10px; }
+.mu-row-tags .tag { font-size: 12px; }
 .mu-deck-tag { color: var(--text); background: var(--line-2); }
 /* Actions replace the duration on hover, so titles keep the full width otherwise. */
 .mu-row-actions { display: none; gap: 2px; animation: muFade .1s; }
 .mu-row:hover .mu-row-actions, .mu-row-actions:focus-within { display: flex; }
 .mu-row:hover > .mu-time:has(+ .mu-row-actions) { display: none; }
 .mu-row-actions button.icon { width: 26px; height: 26px; }
-.mu-sublabel { margin: 18px 0 2px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.mu-sublabel { margin: 18px 0 2px; font-size: 12px; color: var(--text-3); font-weight: 600; }
 
 .mu-pl { display: flex; width: 100%; gap: 10px; align-items: center; justify-content: flex-start; text-align: left; padding: 6px 8px; border: 0; border-left: 2px solid transparent; background: transparent; }
 .mu-pl:hover { background: var(--hover); border-color: transparent; }
@@ -115,7 +115,7 @@ button.mu-on { color: var(--text); background: var(--surface-3); }
 .mu-spin { width: 12px; height: 12px; flex: none; border: 1.5px solid var(--line-2); border-top-color: var(--accent); animation: muSpin .7s linear infinite; }
 
 /* ─── Settings ─────────────────────────────────────────────────── */
-.mu-subhead { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text); font-weight: 600; margin-bottom: 8px; }
+.mu-subhead { font-size: 11px; color: var(--text); font-weight: 600; margin-bottom: 8px; }
 .mu-diag { margin: 12px 0 0; padding: 10px 12px; background: var(--bg-sunk); border: 1px solid var(--line); color: var(--text-2); font: 11.5px/1.6 var(--mono); white-space: pre-wrap; }
 .mu-field { margin-bottom: 11px; }
 .mu-field > span { display: block; color: var(--text-2); font-size: 11px; letter-spacing: .04em; margin-bottom: 5px; }

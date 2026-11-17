@@ -257,10 +257,25 @@ function connect() {
   ws.onerror = () => { try { ws.close(); } catch (_) {} };
 }
 
-// Fall back to a plain fetch so the very first paint is instant.
-fetch('/overlay/queue/api/state')
-  .then(r => r.json())
-  .then(s => { queue = s.queue || []; applyConfig(s.overlay); })
-  .catch(() => {});
-
-connect();
+// ?demo=1 — sample queue for the previews in Steez (uses the real style, fake people).
+if (new URLSearchParams(location.search).get('demo')) {
+  const names = [['NightOwl', true], ['PixelPanda', false], ['Kappa_Kid', true], ['SirLagsALot', false], ['GG_Gwen', false], ['TheRealDan', true]];
+  let shift = 0;
+  const fill = () => {
+    const now = Date.now();
+    queue = names.map((n, i) => names[(i + shift) % names.length]).map(([display, isSub], i) => ({ id: display, login: display.toLowerCase(), display, isSub, joinedAt: now - (i + 1) * 95000 }));
+    render();
+    shift++;
+  };
+  fetch('/overlay/queue/api/state')
+    .then(r => r.json())
+    .then(s => { applyConfig(s.overlay); fill(); setInterval(fill, 4000); })
+    .catch(() => {});
+} else {
+  // Fall back to a plain fetch so the very first paint is instant.
+  fetch('/overlay/queue/api/state')
+    .then(r => r.json())
+    .then(s => { queue = s.queue || []; applyConfig(s.overlay); })
+    .catch(() => {});
+  connect();
+}

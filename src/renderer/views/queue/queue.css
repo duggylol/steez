@@ -51,7 +51,7 @@
 .qu-actions button.icon { width: 26px; height: 26px; padding: 4px; }
 .qu-actions button.qu-rm:hover { color: #e09a95; }
 .qu-slot { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: center; padding: 10px 8px; margin-top: 4px; border: 1px dashed var(--line-2); color: var(--text-3); font-size: 12px; }
-.qu-listhead { display: grid; grid-template-columns: 22px 28px minmax(0, 1fr) 62px 56px; gap: 10px; padding: 0 9px 6px; color: var(--text-3); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.qu-listhead { display: grid; grid-template-columns: 22px 28px minmax(0, 1fr) 62px 56px; gap: 10px; padding: 0 9px 6px; color: var(--text-3); font-size: 12px; }
 .qu-listhead span:nth-child(4) { text-align: right; }
 .qu-queue-panel .empty { margin-top: 4px; }
 
@@ -149,7 +149,7 @@
 .qu-preset-thumb iframe { border: 0; display: block; transform-origin: 0 0; pointer-events: none; background: transparent; color-scheme: normal; }
 .qu-preset-meta { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px 9px; min-width: 0; }
 .qu-preset-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qu-preset-on { position: absolute; top: 6px; left: 6px; z-index: 1; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); padding: 0 5px; }
+.qu-preset-on { position: absolute; top: 6px; left: 6px; z-index: 1; font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--accent-ink); background: var(--accent); padding: 0 5px; }
 .qu-preset-tag { color: var(--text-3); font-size: 11px; line-height: 1.35; }
 .qu-dim { opacity: .45; }
 .qu-stylelink { justify-content: space-between; gap: 12px; }

@@ -12,7 +12,7 @@
 .smp-dh input { width: 80px; }
 .smp-dh { gap: 8px; }
 .smp-dim { opacity: .45; }
-.smp-timer { font-family: var(--mono); font-size: 64px; line-height: 1.05; letter-spacing: .02em; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent-hi); margin: 4px 0 6px; }
+.smp-timer { font-family: var(--font); font-size: 68px; line-height: 1.05; letter-spacing: -.02em; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--accent-hi); margin: 4px 0 6px; }
 .smp-adj button.smp-plus { color: var(--ok); }
 
 /* Now playing */

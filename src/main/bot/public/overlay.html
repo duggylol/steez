@@ -234,7 +234,9 @@
       const el = $('song');
       if (!W.has('song') || !s?.current) return (el.style.display = 'none');
       el.style.display = 'flex';
-      el.querySelector('img').src = `https://i.ytimg.com/vi/${encodeURIComponent(s.current.videoId)}/mqdefault.jpg`;
+      const img = el.querySelector('img');
+      img.style.display = s.current.videoId ? '' : 'none';
+      if (s.current.videoId) img.src = `https://i.ytimg.com/vi/${encodeURIComponent(s.current.videoId)}/mqdefault.jpg`;
       el.querySelector('.t').textContent = `🎵 ${s.current.title}`;
       el.querySelector('.r').textContent = `requested by ${s.current.requestedBy}${s.queue.length ? ` · ${s.queue.length} in queue · !sr to request` : ' · !sr to request'}`;
     }
@@ -255,7 +257,33 @@
       };
       ws.onclose = () => setTimeout(connect, 3000);
     }
-    connect();
+
+    // ?demo=1 — sample content on a loop for the previews in Steez (silent, never connects).
+    function demo() {
+      cfg = { ...cfg, alertSound: false, ttsAlertMessages: false, alertDurationSeconds: 3.2 };
+      const alerts = [
+        { type: 'follow', user: 'NightOwl' }, { type: 'sub', user: 'PixelPanda', tier: 'Tier 1' },
+        { type: 'raid', user: 'FriendlyStreamer', amount: 42 }, { type: 'cheer', user: 'BitsFan', amount: 500, message: 'Take my bits!' },
+        { type: 'giftbomb', user: 'BigSpender', amount: 10 }, { type: 'resub', user: 'LoyalViewer', months: 12, message: 'A whole year!' },
+      ];
+      let i = 0, hp = 1800;
+      const tick = () => {
+        if (W.has('alerts')) { queue.push(alerts[i % alerts.length]); nextAlert(); }
+        if (W.has('effects') && !W.has('alerts')) effect({ effect: ['confetti', 'emoterain', 'spotlight', 'confetti'][i % 4], user: 'PixelPanda', text: 'Hello stream!' });
+        hp = hp <= 300 ? 1800 : hp - 260;
+        boss({ name: 'Ancient Dragon', emoji: '🐉', hp, maxHp: 2000, attackers: 7, top: [{ user: 'NightOwl', dmg: 412 }, { user: 'PixelPanda', dmg: 305 }, { user: 'Kappa_Kid', dmg: 188 }] });
+        const v = [14 + (i % 5) * 3, 9 + (i % 3) * 4, 5 + (i % 4)];
+        poll({ question: 'What should we play next?', open: true, total: v[0] + v[1] + v[2], options: [{ text: 'Minecraft', votes: v[0] }, { text: 'Elden Ring', votes: v[1] }, { text: 'Fortnite', votes: v[2] }] });
+        bets({ question: 'Will we beat the boss first try?', open: true, options: [{ text: 'Yes', pool: 4200 + i * 150, bettors: 12 }, { text: 'No way', pool: 6100 + i * 90, bettors: 17 }] });
+        hype({ mpm: 40, level: [0.35, 0.6, 0.85, 1.1][i % 4] });
+        song({ current: { videoId: '', title: 'Midnight City', requestedBy: 'NightOwl' }, queue: [1, 2, 3] });
+        i++;
+      };
+      tick();
+      setInterval(tick, 4000);
+    }
+    if (params.get('demo')) demo();
+    else connect();
   </script>
 </body>
 </html>
