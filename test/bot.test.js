@@ -234,3 +234,50 @@ test('features: everything switches off, and feature commands still work without
   for (const x of f.list()) await f.set(x.id, true);
   delete db.commands.ping;
 });
+
+test('trivia: a new AI question every round, half about the game, never a repeat', async () => {
+  db.settings.games.trivia.enabled = true;
+  db.settings.games.trivia.useAI = true;
+  const realAi = bot.ai;
+  const realStream = bot.state.stream;
+  const prompts = [];
+  const replies = ['What is the first boss in this game?', 'What is the first boss in this game?', 'Which planet has rings?', 'Who sculpted David?'];
+  let n = 0;
+  bot.ai = { ...realAi, available: () => true, complete: async (_sys, prompt) => (prompts.push(prompt), JSON.stringify({ question: replies[n++], answers: ['ans' + n] })) };
+  bot.state.stream = { ...(realStream || {}), game: 'Elden Ring' };
+  const answerRound = () => chat('quizzer', db.triviaHistory.at(-1).a);
+  try {
+    await bot.runAction('trivia:start', {});
+    assert.match(said.join(' '), /first boss/);
+    assert.match(prompts[0], /Elden Ring/);
+    await answerRound();
+    said.length = 0;
+    await bot.runAction('trivia:start', {});
+    // The AI repeated itself; Steez noticed, told it, and asked again.
+    assert.equal(prompts.length, 3);
+    assert.match(prompts[2], /What is the first boss in this game\?/);
+    assert.doesNotMatch(prompts[1], /Elden Ring/, 'every other round is a random topic');
+    assert.match(said.join(' '), /Which planet has rings/);
+    await answerRound();
+  } finally {
+    bot.ai = realAi;
+    bot.state.stream = realStream;
+  }
+});
+
+test('trivia without AI: built-in questions are never repeated until all were used', async () => {
+  const realAi = bot.ai;
+  bot.ai = { ...realAi, available: () => false };
+  const asked = [];
+  try {
+    for (let i = 0; i < 30; i++) {
+      await bot.runAction('trivia:start', {});
+      const last = db.triviaHistory.at(-1);
+      asked.push(last.q);
+      await chat('quizzer', last.a);
+    }
+  } finally {
+    bot.ai = realAi;
+  }
+  assert.equal(new Set(asked).size, 30);
+});

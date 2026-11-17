@@ -1,14 +1,26 @@
 // Chat polls (with overlay) and points betting (predictions with your own currency, parimutuel payouts).
 import { broadcast } from '../web/hub.js';
 import { fmtNum, parseAmount } from '../util.js';
+import { keep, restore, resumeAt } from '../session.js';
 
 export function init(bot) {
   // ─── Polls ──────────────────────────────────────────────────
   let poll = null; // { question, options:[{text,votes}], voters: Map<login,index>, open, endsAt }
   const pollView = () =>
     poll && { question: poll.question, options: poll.options, total: poll.voters.size, open: poll.open, endsAt: poll.endsAt };
-  const pushPoll = () => broadcast('poll', pollView());
+  const pushPoll = () => {
+    broadcast('poll', pollView());
+    keep('poll', poll?.open ? { question: poll.question, options: poll.options, voters: [...poll.voters], open: true, endsAt: poll.endsAt } : null);
+  };
   bot.pollState = pollView;
+  {
+    // Pick up a poll that was open when Steez closed (its timer continues from where it was).
+    const saved = restore('poll');
+    if (saved?.open) {
+      poll = { ...saved, voters: new Map(saved.voters || []), endsAt: resumeAt(saved.endsAt) };
+      if (poll.endsAt) poll.timer = setTimeout(() => endPoll(), Math.max(5000, poll.endsAt - Date.now()));
+    }
+  }
 
   function startPoll(question, options, seconds = 0) {
     if (options.length < 2) throw new Error('A poll needs at least 2 options');
@@ -79,8 +91,16 @@ export function init(bot) {
         return { text, pool: w.reduce((s, x) => s + x.amount, 0), bettors: w.length };
       }),
     };
-  const pushBets = () => broadcast('bets', betView());
+  const pushBets = () => {
+    broadcast('bets', betView());
+    keep('bets', bets && { question: bets.question, options: bets.options, wagers: [...bets.wagers], open: bets.open });
+  };
   bot.betState = betView;
+  {
+    // Bets hold viewers' points, so they always come back after a restart.
+    const saved = restore('bets');
+    if (saved) bets = { ...saved, wagers: new Map(saved.wagers || []) };
+  }
 
   function openBets(question, options) {
     if (bets) throw new Error('Bets are already running — resolve or refund first');

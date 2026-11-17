@@ -222,6 +222,7 @@ function ensureYtAudio() {
   el.volume = effectiveVolume();
   el.addEventListener('ended', () => P.local.track && P.local.track.source === 'youtube' && endLocal());
   el.addEventListener('playing', () => music().setPlayback({ playing: true }));
+  el.addEventListener('timeupdate', () => P.local.track && P.local.track.source === 'youtube' && saveNowPlaying(el.currentTime * 1000));
   el.addEventListener('pause', () => {
     if (P.local.track && !el.ended) music().setPlayback({ playing: false });
   });
@@ -271,8 +272,20 @@ function stopLocal() {
   if (!P.local.track) return;
   silenceLocal();
   P.local = { track: null, playing: false };
+  saveNowPlaying(0, true);
   P.resumeSpotifyAfterLocal = false;
   music().setLocal({ track: null, playing: false });
+}
+
+// The clip playing inside Steez is saved (with its position) so closing Steez and opening it again
+// picks it back up instead of losing it.
+let lastSaved = 0;
+function saveNowPlaying(positionMs, force = false) {
+  const t = P.local.track;
+  if (!force && Date.now() - lastSaved < 5000) return;
+  lastSaved = Date.now();
+  const nowPlaying = t ? { track: { ...t, resumeMs: undefined }, positionMs: Math.max(0, Math.round(positionMs || 0)) } : null;
+  window.songseek?.settings.set({ nowPlaying }).catch(() => {});
 }
 
 async function startLocal(track) {
@@ -293,6 +306,7 @@ async function startLocal(track) {
     // It's on now, not pending.
     s.setQueue(music().queue.filter((t) => t.id !== track.id));
     pushOverlay(track);
+    saveNowPlaying(track.resumeMs || 0, true);
 
     if (track.source === 'youtube') {
       const el = ensureYtAudio();
@@ -302,6 +316,7 @@ async function startLocal(track) {
       el.src = info.streamUrl;
       el.volume = effectiveVolume();
       if (info.durationMs) music().setPlayback({ durationMs: info.durationMs });
+      if (track.resumeMs) el.currentTime = track.resumeMs / 1000; // back where it was before Steez closed
       await el.play();
     } else {
       playSoundcloud(track);
@@ -319,6 +334,7 @@ async function startLocal(track) {
 function endLocal() {
   silenceLocal();
   P.local = { track: null, playing: false };
+  saveNowPlaying(0, true);
   music().setLocal({ track: null, playing: false });
   // Back to mirroring Spotify (the next state poll fills this in again).
   const sp = music().spotify;
@@ -343,8 +359,10 @@ function playSoundcloud(track) {
     widget.bind(E.READY, () => {
       if (!mine()) return;
       widget.setVolume(effectiveVolume() * 100);
+      if (track.resumeMs) widget.seekTo(track.resumeMs);
       widget.play();
     });
+    widget.bind(E.PLAY_PROGRESS, (e) => mine() && saveNowPlaying(e?.currentPosition));
     widget.bind(E.FINISH, () => mine() && endLocal());
     widget.bind(E.PLAY, () => {
       P.sc.playing = true;

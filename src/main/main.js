@@ -133,6 +133,16 @@ async function startCore() {
     const { flush: flushBotDb } = await import('./bot/store.js');
     registerAccountImport({ ipcMain, parent: () => win, send, log, bot, db, flush: flushBotDb, dataDir: process.env.STEEZ_BOT_DATA });
   }
+  {
+    // Giveaways, polls, bets, heists, raid bosses and trivia rounds that are running when Steez
+    // closes are saved and picked up again on the next launch (see bot/session.js).
+    const { touch } = await import('./bot/session.js');
+    const { flush } = await import('./bot/store.js');
+    quitHooks.push(() => {
+      touch();
+      flush();
+    });
+  }
 
   // Import a still-valid SongSeek Twitch login so returning users are connected immediately.
   if (!db.auth.broadcaster && !steez.get('importsDone').songseekTwitch && songseek?.data?.twitchTokens?.access_token) {

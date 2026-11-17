@@ -158,6 +158,27 @@ function createSubathon(opts) {
     else t.remaining = Math.max(0, remainingMs() + ms);
     if (ms > 0 && t.ended) t.ended = false;
   }
+  // Steez: a running clock picks up where it left off after Steez was closed (or crashed): the time
+  // Steez was closed is added back, measured from the last heartbeat.
+  {
+    const t = D().timer;
+    if (t.running && t.heartbeat && !t.ended) {
+      const closedFor = Math.max(0, Date.now() - t.heartbeat);
+      t.endsAt += closedFor;
+      t.heartbeat = Date.now();
+      store.save();
+      if (closedFor > 30000) log?.info?.(`Subathon clock resumed where it left off (Steez was closed for ${Math.round(closedFor / 60000)} min).`);
+    }
+  }
+  intervals.push(
+    setInterval(() => {
+      const t = D().timer;
+      if (t.running && !t.ended) {
+        t.heartbeat = Date.now();
+        store.save();
+      }
+    }, 10000),
+  );
   intervals.push(
     setInterval(() => {
       const t = D().timer;
@@ -1327,6 +1348,7 @@ function createSubathon(opts) {
       }
     }
     await stopLan();
+    if (D().timer.running) D().timer.heartbeat = Date.now();
     store.saveNow();
   }
 

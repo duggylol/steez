@@ -1,6 +1,7 @@
 // Giveaways / raffles with keyword or ticket entry, point-cost tickets, sub luck and winner-response tracking.
 import { db, getUser, bumpStat } from '../store.js';
 import { broadcast } from '../web/hub.js';
+import { keep, restore } from '../session.js';
 
 export function init(bot) {
   let raffle = null; // { title, keyword, ticketCost, maxTickets, subLuck, entries: Map<login,{display,tickets,isSub}>, open }
@@ -19,7 +20,13 @@ export function init(bot) {
     },
     lastWinner,
   });
-  const push = () => broadcast('raffle', view());
+  const push = () => {
+    broadcast('raffle', view());
+    keep('raffle', raffle && { ...raffle, entries: [...raffle.entries] });
+  };
+  // Pick up a giveaway that was running when Steez closed.
+  const saved = restore('raffle');
+  if (saved) raffle = { ...saved, entries: new Map(saved.entries || []) };
   bot.raffleState = view;
 
   function start({ title = 'Giveaway', keyword = '!enter', ticketCost = 0, maxTickets = 1, subLuck = 1, followersOnly = false } = {}) {

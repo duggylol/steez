@@ -2,6 +2,7 @@
 import { db } from '../store.js';
 import { randInt, pick, fmtNum } from '../util.js';
 import { broadcast } from '../web/hub.js';
+import { keep, restore, resumeAt } from '../session.js';
 
 const BOSSES = [
   { name: 'The Lag Monster', emoji: '🐌' },
@@ -32,7 +33,18 @@ export function init(bot) {
         .map(([, v]) => ({ user: v.display, dmg: v.dmg })),
       endsAt: boss.endsAt,
     };
-  const push = () => broadcast('boss', publicState());
+  const push = () => {
+    broadcast('boss', publicState());
+    keep('boss', boss && { ...boss, timer: undefined, damage: [...boss.damage] });
+  };
+  {
+    // A raid boss that was up when Steez closed is still there, with the time it had left.
+    const saved = restore('boss');
+    if (saved) {
+      boss = { ...saved, damage: new Map(saved.damage || []), endsAt: resumeAt(saved.endsAt) };
+      boss.timer = setTimeout(() => flee(), Math.max(10000, boss.endsAt - Date.now()));
+    }
+  }
   bot.bossState = publicState;
 
   function spawn(hp) {

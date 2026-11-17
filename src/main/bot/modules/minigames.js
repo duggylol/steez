@@ -1,7 +1,9 @@
 // Trivia (built-in bank or AI generated) and the secret-word game.
 import { db, save, getUser, bumpStat } from '../store.js';
-import { pick, normalizeAnswer } from '../util.js';
+import { pick, normalizeAnswer, sanitizeChat } from '../util.js';
 import { log } from '../logger.js';
+import { keep, restore, resumeAt } from '../session.js';
+import { planRound, triviaPrompt, TRIVIA_SYSTEM, isRepeat, parseTrivia } from '../trivia.js';
 
 const BANK = [
   ['What is the largest planet in our solar system?', ['jupiter']],
@@ -39,34 +41,101 @@ const BANK = [
 export function init(bot) {
   const T = () => db.settings.games.trivia;
   let round = null;
+  let starting = false;
+
+  // Every question asked is remembered so it's never asked again (AI questions and the built-in bank).
+  db.triviaHistory ||= [];
+  db.meta ||= {};
+  // Trivia used to default to the small built-in bank; it now writes new questions with the AI.
+  if (!db.meta.triviaAiV1) {
+    T().useAI = true;
+    db.meta.triviaAiV1 = Date.now();
+    save();
+  }
+  const remember = (q, a, kind, topic) => {
+    db.triviaHistory.push({ q, a, kind, topic, t: Date.now() });
+    if (db.triviaHistory.length > 1000) db.triviaHistory.splice(0, db.triviaHistory.length - 1000);
+    save();
+  };
+
+  async function aiQuestion(topic) {
+    const plan = planRound({ topic, game: bot.state.stream?.game, randomTopic: T().aiTopic, state: db.meta.trivia || {} });
+    const recent = db.triviaHistory.slice(-80).map((h) => h.q);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const difficulty = pick(['easy', 'medium', 'medium', 'tricky']);
+      const out = await bot.ai.complete(TRIVIA_SYSTEM, triviaPrompt(plan, recent, difficulty), { maxTokens: 1500 });
+      const r = parseTrivia(out);
+      if (!r) continue;
+      if (isRepeat(r.question, r.answers[0], db.triviaHistory)) {
+        recent.push(r.question); // tell it about this one too and try again
+        continue;
+      }
+      db.meta.trivia = plan.state;
+      return { question: sanitizeChat(r.question, 300), answers: r.answers, kind: plan.kind, topic: plan.topic };
+    }
+    return null;
+  }
+
+  /** Built-in questions, each used once before any comes back (only when the AI can't be used). */
+  function bankQuestion() {
+    const asked = new Set(db.triviaHistory.map((h) => h.q));
+    let fresh = BANK.filter(([q]) => !asked.has(q));
+    if (!fresh.length) {
+      // Every built-in question has been asked: start the bank over, oldest first.
+      const order = new Map(db.triviaHistory.map((h, i) => [h.q, i]));
+      fresh = [...BANK].sort((x, y) => (order.get(x[0]) ?? -1) - (order.get(y[0]) ?? -1)).slice(0, Math.ceil(BANK.length / 2));
+    }
+    const [question, answers] = pick(fresh);
+    return { question, answers, kind: 'bank', topic: '' };
+  }
 
   async function start(topic) {
-    if (round) return false;
-    let q, answers;
-    if (T().useAI && bot.ai?.available()) {
-      try {
-        const r = await bot.ai.trivia(topic || T().aiTopic || bot.state.stream?.game || 'general knowledge');
-        if (r) [q, answers] = [r.question, r.answers];
-      } catch (e) {
-        log.warn('AI trivia failed, using built-in bank:', e.message);
+    if (round || starting) return false;
+    starting = true;
+    try {
+      let r = null;
+      if (T().useAI !== false && bot.ai?.available()) {
+        try {
+          r = await aiQuestion(topic);
+        } catch (e) {
+          log.warn('AI trivia failed, using a built-in question:', e.message);
+        }
       }
+      if (!r) r = bankQuestion();
+      if (round) return false;
+      remember(r.question, r.answers[0], r.kind, r.topic);
+      begin({ q: r.question, answers: r.answers.map(normalizeAnswer), display: r.answers[0], ends: Date.now() + T().answerSeconds * 1000 });
+      bot.say(`🧠 TRIVIA${r.kind === 'game' ? ` (${r.topic})` : ''} (${T().answerSeconds}s, +${bot.fmtPoints(T().reward)}): ${r.question}`);
+      return true;
+    } finally {
+      starting = false;
     }
-    if (!q) [q, answers] = pick(BANK);
-    round = { q, answers: answers.map(normalizeAnswer), display: answers[0], ends: Date.now() + T().answerSeconds * 1000 };
+  }
+
+  function begin(r) {
+    round = r;
+    keep('trivia', { q: r.q, answers: r.answers, display: r.display, ends: r.ends });
     round.timer = setTimeout(() => {
       bot.say(`⌛ Time's up! The answer was: ${round.display}`);
-      round = null;
-    }, T().answerSeconds * 1000);
-    bot.say(`🧠 TRIVIA (${T().answerSeconds}s, +${bot.fmtPoints(T().reward)}): ${q}`);
-    return true;
+      end();
+    }, Math.max(5000, r.ends - Date.now()));
+  }
+  function end() {
+    if (round) clearTimeout(round.timer);
+    round = null;
+    keep('trivia', null);
+  }
+  {
+    // A round that was running when Steez closed keeps its remaining time.
+    const saved = restore('trivia');
+    if (saved?.q) begin({ ...saved, ends: resumeAt(saved.ends) });
   }
   bot.trivia = { start };
 
   bot.on('chat', (ctx) => {
     if (round && round.answers.includes(normalizeAnswer(ctx.text))) {
-      clearTimeout(round.timer);
       const ans = round.display;
-      round = null;
+      end();
       bot.addPoints(ctx.user.login, T().reward, ctx.user.display);
       const wins = bumpStat(getUser(ctx.user.login), 'triviaWins');
       if (wins >= 10) bot.emit('achievement:unlock', ctx.user.login, 'trivia_whiz');

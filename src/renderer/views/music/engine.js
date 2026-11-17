@@ -49,7 +49,11 @@ export async function bootMusic(go) {
   try {
     const settings = await ss.settings.get();
     s.setSettings(settings);
-    if (Array.isArray(settings.queue) && settings.queue.length) useMusic.setState({ queue: settings.queue });
+    const queue = Array.isArray(settings.queue) ? settings.queue : [];
+    // A YouTube/SoundCloud request that was playing when Steez closed goes back to the front, from where it was.
+    const np = settings.nowPlaying;
+    if (np?.track?.id && !queue.some((t) => t.id === np.track.id)) queue.unshift({ ...np.track, resumeMs: np.positionMs || 0 });
+    if (queue.length) useMusic.setState({ queue });
     initPlayer(settings.volume ?? 0.8);
 
     const [sp, tw] = await Promise.all([ss.spotify.status(), ss.twitch.status()]);

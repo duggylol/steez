@@ -32,6 +32,7 @@ const DEFAULTS = {
   modCommandsEnabled: true,
   volume: 0.8,
   queue: [], // pending requests (survive restarts)
+  nowPlaying: null, // the YouTube/SoundCloud request playing in Steez + how far in, so a restart resumes it
 };
 
 const NOT_IMPORTED = new Set(['twitchTokens', 'twitchUser', 'twitchClientId', 'theme']);

@@ -5,6 +5,17 @@ import { api, buffers, onBot } from '../../lib/bot.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
+// Append / replace children, skipping null and false (so an empty section never shows the word "null").
+const kidsOf = (kids) => kids.flat(Infinity).filter((k) => k != null && k !== false);
+function add(el, ...kids) {
+  el.append(...kidsOf(kids));
+  return el;
+}
+function put(el, ...kids) {
+  el.replaceChildren(...kidsOf(kids));
+  return el;
+}
+
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -18,7 +29,7 @@ function h(tag, attrs = {}, ...kids) {
   }
   for (const kid of kids.flat(Infinity)) {
     if (kid == null || kid === false) continue;
-    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+    add(el, kid instanceof Node ? kid : document.createTextNode(String(kid)));
   }
   return el;
 }
@@ -78,7 +89,8 @@ const HELP = {
   'hype.threshold': 'A hype moment = chat speed this many times above its normal baseline.',
   'songs.voteSkipVotes': 'Votes needed for !voteskip.',
   'games.boss.autoSpawnMinutes': '0 = only spawn manually.',
-  'games.trivia.useAI': 'Generate fresh questions with AI (needs ANTHROPIC_API_KEY), about the topic or current game.',
+  'games.trivia.useAI': 'Write a brand-new question with AI every round (needs your Anthropic API key on the AI page): half about the game you’re playing, half random topics. Questions are never repeated. Off = a small built-in set.',
+  'games.trivia.aiTopic': 'Optional: a topic to use for the non-game half instead of random categories.',
   'games.trivia.duringAdBreaks': 'Start a trivia round automatically when an ad break begins.',
   'overlay.ttsVoice': 'Name of a voice installed on this PC (leave empty for the default).',
   'shoutout.autoList': 'Streamers who get an automatic shoutout the first time they chat each stream (one per line).',
@@ -117,7 +129,7 @@ function objTable(arr, path) {
   const cols = [...new Set([...Object.keys(tpl), ...arr.flatMap((o) => Object.keys(o))])];
   const wrap = h('div');
   const draw = () => {
-    wrap.replaceChildren(
+    put(wrap, 
       h(
         'table',
         { class: 'obj-table' },
@@ -210,12 +222,12 @@ function pageOverview(main, on) {
       pill(S.config.youtube, 'YouTube search'),
     );
 
-  main.append(head(`Overview${st.channel ? ` — ${st.channel}` : ''}`));
+  add(main, head(`Overview${st.channel ? ` — ${st.channel}` : ''}`));
   const statusBox = h('div', { style: 'margin-top:10px' }, statusRow());
-  on.status = (s) => statusBox.replaceChildren(statusRow(s));
+  on.status = (s) => put(statusBox, statusRow(s));
 
   if (!S.config.clientIdSet) {
-    main.append(
+    add(main, 
       h('div', { class: 'banner warn' }, h('div', { class: 'grow' }, h('b', {}, 'Twitch app not set. '), 'Add a Twitch Client ID in Settings to connect your channel.'), btn('Open Settings', () => (location.hash = 'settings'), 'sm primary')),
     );
   }
@@ -239,7 +251,7 @@ function pageOverview(main, on) {
         : btn('Connect with Twitch', () => (S.config.clientIdSet ? loginAs(role) : (location.hash = 'settings')), role === 'broadcaster' ? 'primary' : ''),
     );
   };
-  main.append(
+  add(main, 
     card(
       'Accounts',
       acctRow('broadcaster', 'Your channel', 'Required. Log in with your streaming account.'),
@@ -254,15 +266,15 @@ function pageOverview(main, on) {
   const sess = h('div');
   const drawSession = (s) => {
     s ||= S.session;
-    if (!s) return sess.replaceChildren(h('div', { class: 'muted' }, 'Stats appear here while you are live.'));
+    if (!s) return put(sess, h('div', { class: 'muted' }, 'Stats appear here while you are live.'));
     const stat = (v, l) => h('div', { class: 'stat' }, h('b', {}, v), h('span', {}, l));
-    sess.replaceChildren(
+    put(sess, 
       h('div', { class: 'row' }, stat(dur(s.duration), 'live'), stat(fmt(st.stream?.viewers), 'viewers'), stat(s.peakViewers, 'peak'), stat(fmt(s.messages), 'messages'), stat(s.uniqueChatters, 'chatters'), stat(s.follows, 'follows'), stat(s.subs + s.gifts, 'subs'), stat(fmt(s.bits), 'bits')),
     );
   };
   drawSession();
   on.session = (s) => drawSession(s);
-  main.append(
+  add(main, 
     h('div', { class: 'grid2' },
       card('Stream info',
         h('label', { class: 'field' }, h('span', {}, 'Title'), title),
@@ -287,7 +299,7 @@ function pageOverview(main, on) {
   // Chat
   const log = h('div', { class: 'chatlog' });
   const addLine = (m) => {
-    log.append(
+    add(log, 
       h('div', { class: `m${m.bot ? ' bot' : ''}` }, h('span', { class: 't' }, new Date(m.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
         h('span', { class: 'u', style: m.color ? `color:${m.color}` : '' }, m.bot ? '🤖 bot' : m.user), ': ', m.text),
     );
@@ -314,7 +326,7 @@ function pageOverview(main, on) {
   };
   say.addEventListener('keydown', (e) => e.key === 'Enter' && sendSay());
   simText.addEventListener('keydown', (e) => e.key === 'Enter' && sendSim());
-  main.append(
+  add(main, 
     card('Live chat', log,
       h('div', { class: 'row', style: 'margin-top:10px' }, say, btn('Send', sendSay, 'primary')),
       h('div', { class: 'row', style: 'margin-top:8px' }, h('span', { class: 'muted small' }, '🧪 Test as:'), simUser, simLevel, simText, btn('Simulate', sendSim)),
@@ -325,7 +337,7 @@ function pageOverview(main, on) {
 
 // Commands
 function pageCommands(main) {
-  main.append(head('Commands'));
+  add(main, head('Commands'));
   const cmds = S.commands;
   const list = h('div');
   const search = h('input', { placeholder: 'Search commands…', oninput: () => draw() });
@@ -335,7 +347,7 @@ function pageCommands(main) {
     const c = structuredClone(existing || { response: '', level: 'everyone', cooldown: 5, userCooldown: 0, cost: 0, aliases: [], replyType: 'say', enabled: true });
     const nameIn = h('input', { value: name || '', placeholder: 'e.g. discord' });
     const bg = h('div', { class: 'modal-bg', onclick: (e) => e.target === bg && bg.remove() });
-    bg.append(
+    add(bg, 
       h('div', { class: 'modal' },
         h('h3', {}, existing ? `Edit !${name}` : 'New command'),
         h('label', { class: 'field' }, h('span', {}, 'Command name (without prefix)'), nameIn),
@@ -364,13 +376,13 @@ function pageCommands(main) {
         ),
       ),
     );
-    document.body.append(bg);
+    add(document.body, bg);
   }
 
   function draw() {
     const q = search.value.toLowerCase();
     const names = Object.keys(cmds).filter((n) => !q || n.includes(q) || cmds[n].response.toLowerCase().includes(q)).sort();
-    list.replaceChildren(
+    put(list, 
       names.length
         ? h('table', {},
             h('tr', {}, ['Command', 'Response', 'Level', 'Cooldown', 'Uses', 'On', ''].map((t) => h('th', {}, t))),
@@ -391,7 +403,7 @@ function pageCommands(main) {
     );
   }
   draw();
-  main.append(card('Custom commands', h('div', { class: 'row', style: 'margin-bottom:10px' }, search, btn('+ New command', () => editor(), 'primary')), list));
+  add(main, card('Custom commands', h('div', { class: 'row', style: 'margin-bottom:10px' }, search, btn('+ New command', () => editor(), 'primary')), list));
 
   // Built-ins
   const rows = S.builtins.map((b) => ({ ...b }));
@@ -410,7 +422,7 @@ function pageCommands(main) {
       ),
     ),
   );
-  main.append(
+  add(main, 
     card('Built-in commands', h('div', { class: 'help', style: 'margin-bottom:8px' }, 'Disable, rename (via aliases), change permissions or cooldowns of any default command.'), bt,
       h('div', { class: 'row', style: 'margin-top:10px' },
         btn('Save built-ins', async () => {
@@ -423,7 +435,7 @@ function pageCommands(main) {
   );
 
   const imp = h('textarea', { placeholder: 'Paste a JSON export from StreamElements / Streamlabs / Nightbot / Fossabot, or CSV lines: command,response', style: 'min-height:120px' });
-  main.append(
+  add(main, 
     card('Import commands from another bot', imp,
       h('div', { class: 'help' }, 'Variables like $(user), ${user}, $user, {user}, $target, $readapi(url) are converted automatically.'),
       h('div', { class: 'row', style: 'margin-top:8px' }, btn('Import', async () => {
@@ -436,7 +448,7 @@ function pageCommands(main) {
 
 // Timers
 function pageTimers(main) {
-  main.append(head('Timers'), h('p', { class: 'muted' }, 'Messages posted on an interval — only if enough chat lines happened since the last one, so the bot never talks to an empty room.'));
+  add(main, head('Timers'), h('p', { class: 'muted' }, 'Messages posted on an interval — only if enough chat lines happened since the last one, so the bot never talks to an empty room.'));
   const timers = structuredClone(S.timers);
   const box = h('div');
   const drawBound = () => {
@@ -445,7 +457,7 @@ function pageTimers(main) {
       t.random ??= false;
       t.announce ??= false;
     }
-    box.replaceChildren(
+    put(box, 
       timers.map((t, i) =>
         card(null,
           h('div', { class: 'row' }, h('input', { value: t.name, style: 'max-width:260px;font-weight:600', oninput: (e) => (t.name = e.target.value) }),
@@ -463,7 +475,7 @@ function pageTimers(main) {
   };
   const draw = drawBound;
   drawBound();
-  main.append(box,
+  add(main, box,
     h('div', { class: 'row' },
       btn('+ New timer', () => { timers.push({ id: Math.random().toString(36).slice(2, 10), name: 'New timer', enabled: true, intervalMinutes: 15, minLines: 5, onlineOnly: true, random: false, announce: false, messages: [] }); drawBound(); }),
       btn('Save timers', async () => { S.timers = await api.put('/api/timers', timers); toast('Timers saved ✓'); }, 'primary')));
@@ -471,20 +483,20 @@ function pageTimers(main) {
 
 // Moderation
 function pageModeration(main, on) {
-  main.append(head('Moderation'));
+  add(main, head('Moderation'));
   const sh = h('span');
-  const drawShield = (s) => sh.replaceChildren(s?.on ? h('span', { class: 'pill bad' }, `🛡️ ACTIVE until ${new Date(s.until).toLocaleTimeString()}`) : h('span', { class: 'pill' }, 'inactive'));
+  const drawShield = (s) => put(sh, s?.on ? h('span', { class: 'pill bad' }, `🛡️ ACTIVE until ${new Date(s.until).toLocaleTimeString()}`) : h('span', { class: 'pill' }, 'inactive'));
   drawShield(S.shield);
   on.shield = drawShield;
-  main.append(card('Shield mode (panic button)', h('p', { class: 'muted' }, 'Turns on followers-only / slow / emote-only for a few minutes. Triggers automatically during follow-bot attacks.'),
+  add(main, card('Shield mode (panic button)', h('p', { class: 'muted' }, 'Turns on followers-only / slow / emote-only for a few minutes. Triggers automatically during follow-bot attacks.'),
     h('div', { class: 'row' }, sh, btn('Activate', () => api.action('shield', { on: true }), 'primary'), btn('Deactivate', () => api.action('shield', { on: false })))));
-  main.append(h('div', { class: 'grid2' }, h('div', {}, settingsForm('moderation', { title: 'Spam filters' })), h('div', {}, settingsForm('shield', { title: 'Shield settings' }), modlogCard(on))));
+  add(main, h('div', { class: 'grid2' }, h('div', {}, settingsForm('moderation', { title: 'Spam filters' })), h('div', {}, settingsForm('shield', { title: 'Shield settings' }), modlogCard(on))));
 }
 function modlogCard(on) {
   const body = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
   const rows = [];
   const draw = () =>
-    body.replaceChildren(rows.length
+    put(body, rows.length
       ? h('table', {}, h('tr', {}, ['When', 'User', 'Filter', 'Action', 'Message'].map((t) => h('th', {}, t))),
           rows.slice(0, 100).map((r) => h('tr', {}, h('td', { class: 'small' }, ago(r.t)), h('td', {}, r.user), h('td', {}, r.filter), h('td', {}, r.action), h('td', { class: 'small mono' }, r.message || r.reason))))
       : h('div', { class: 'empty' }, 'Nothing moderated yet.'));
@@ -495,7 +507,7 @@ function modlogCard(on) {
 
 // AI
 function pageAI(main) {
-  main.append(head('AI'));
+  add(main, head('AI'));
   const keyIn = h('input', { type: 'password', autocomplete: 'off', placeholder: S.config.anthropic ? '••••••••••••  (saved — paste a new key to replace it)' : 'Paste your key: sk-ant-…' });
   const keyState = h('span', { class: S.config.anthropic ? 'pill good' : 'pill' }, S.config.anthropic ? 'Key saved — AI is on' : 'No key yet — AI is off');
   const saveKey = async (value) => {
@@ -507,7 +519,7 @@ function pageAI(main) {
     toast(r.anthropicKey ? 'API key saved' : 'API key removed');
   };
   keyIn.addEventListener('keydown', (e) => e.key === 'Enter' && keyIn.value.trim() && saveKey(keyIn.value.trim()));
-  main.append(
+  add(main, 
     card('Anthropic API key',
       h('div', { class: 'row' }, keyIn, btn('Save', () => keyIn.value.trim() && saveKey(keyIn.value.trim()), 'primary'), btn('Remove', () => confirm('Remove the saved API key?') && saveKey(''), 'danger')),
       h('div', { class: 'row', style: 'margin-top:10px' }, keyState,
@@ -516,7 +528,7 @@ function pageAI(main) {
   );
   const out = h('div', { class: 'mono', style: 'margin-top:10px;white-space:pre-wrap' });
   const prompt = h('input', { placeholder: 'Ask or tell it to do something — e.g. "play my chill playlist" or "start a poll: best snack?"' });
-  main.append(
+  add(main, 
     h('div', { class: 'grid2' },
       settingsForm('ai', { title: 'AI settings' }),
       h('div', {},
@@ -530,7 +542,7 @@ Did: ${r.actions.join(', ')}` : ''); }, 'primary')), out),
             h('li', {}, h('b', {}, '!catchup [minutes]'), ' — “what did I miss?” summary of chat'),
             h('li', {}, h('b', {}, '!translate'), ' + optional auto-translation of foreign-script messages'),
             h('li', {}, h('b', {}, '${ai prompt}'), ' — use AI inside any custom command (try !roast)'),
-            h('li', {}, h('b', {}, 'AI trivia'), ' — fresh questions about your current game (Games → Trivia → Use AI)'),
+            h('li', {}, h('b', {}, 'AI trivia'), ' — a brand-new question every round, half about your current game (Games → Trivia → Use AI)'),
             h('li', {}, h('b', {}, 'Stream recap'), ' — written automatically at the end of each stream (Analytics + Discord)'),
             h('li', {}, h('b', {}, 'Spam check'), ' — optional AI review of first-time chatter messages'),
           ))),
@@ -540,14 +552,14 @@ Did: ${r.actions.join(', ')}` : ''); }, 'primary')), out),
 
 // Loyalty
 function pageLoyalty(main) {
-  main.append(head('Points & Viewers'));
+  add(main, head('Points & Viewers'));
   const tbl = h('div');
   const search = h('input', { placeholder: 'Search users…' });
   const sort = h('select', {}, ['points', 'watchMinutes', 'messages', 'lastSeen', 'firstSeen'].map((s) => h('option', { value: s }, label(s))));
   let timer;
   const load = async () => {
     const r = await api.get(`/api/users?search=${encodeURIComponent(search.value)}&sort=${sort.value}&limit=200`);
-    tbl.replaceChildren(
+    put(tbl, 
       h('div', { class: 'muted small', style: 'margin-bottom:6px' }, `${fmt(r.total)} viewers`),
       h('table', {}, h('tr', {}, ['User', S.settings.loyalty.currencyName, 'Watch time', 'Messages', 'Achievements', 'Last seen', ''].map((t) => h('th', {}, t))),
         r.users.map((u) =>
@@ -567,7 +579,7 @@ function pageLoyalty(main) {
   load();
   const csv = h('textarea', { placeholder: 'username,points[,minutes]\nviewer1,1500\nviewer2,320,600' });
   const mode = h('select', {}, h('option', { value: 'replace' }, 'Replace balances'), h('option', { value: 'add' }, 'Add to balances'));
-  main.append(
+  add(main, 
     h('div', { class: 'grid2' },
       settingsForm('loyalty', { title: 'Loyalty settings' }),
       h('div', {},
@@ -579,10 +591,10 @@ function pageLoyalty(main) {
 
 // Games
 function pageGames(main, on) {
-  main.append(head('Games'));
+  add(main, head('Games'));
   const bossBox = h('div');
   const drawBoss = (b) =>
-    bossBox.replaceChildren(b
+    put(bossBox, b
       ? h('div', {}, h('b', {}, `${b.emoji} ${b.name}`), ` — ${fmt(b.hp)}/${fmt(b.maxHp)} HP, ${b.attackers} attackers`, h('div', { class: 'bar', style: 'margin:8px 0' }, h('i', { style: `width:${(b.hp / b.maxHp) * 100}%;background:var(--bad)` })), btn('Make it flee', () => api.action('boss:flee'), 'sm danger'))
       : h('div', { class: 'muted' }, 'No boss active.'));
   drawBoss(S.boss);
@@ -591,7 +603,7 @@ function pageGames(main, on) {
   const topic = h('input', { placeholder: 'Topic (optional, AI only)' });
   const sw = h('input', { placeholder: 'secret word', value: S.settings.games.secretWord.word });
   const swr = h('input', { type: 'number', value: S.settings.games.secretWord.reward, style: 'max-width:120px' });
-  main.append(
+  add(main, 
     h('div', { class: 'grid' },
       card('Raid boss', bossBox, h('div', { class: 'row', style: 'margin-top:8px' }, hp, btn('Spawn boss', () => api.action('boss:spawn', { hp: hp.value }), 'primary'))),
       card('Trivia', h('div', { class: 'row' }, topic, btn('Start round', () => api.action('trivia:start', { topic: topic.value }), 'primary'))),
@@ -603,14 +615,14 @@ function pageGames(main, on) {
 
 // Giveaways
 function pageGiveaways(main, on) {
-  main.append(head('Giveaways'));
+  add(main, head('Giveaways'));
   const f = { title: 'Giveaway', keyword: '!enter', ticketCost: 0, maxTickets: 1, subLuck: 2 };
   const live = h('div');
   const draw = (st) => {
     st ||= S.raffle;
     S.raffle = st;
     const r = st?.raffle;
-    live.replaceChildren(
+    put(live, 
       r
         ? h('div', {},
             h('div', { class: 'row' }, h('b', {}, r.title), h('span', { class: `pill ${r.open ? 'good' : ''}` }, r.open ? 'OPEN' : 'closed'), h('span', { class: 'muted' }, `${r.entries.length} entrants · ${r.totalTickets} tickets`)),
@@ -623,21 +635,21 @@ function pageGiveaways(main, on) {
   };
   draw();
   on.raffle = draw;
-  main.append(h('div', { class: 'grid2' },
+  add(main, h('div', { class: 'grid2' },
     card('Start a giveaway', Object.keys(f).map((k) => field(f, k, `raffle.${k}`)), h('div', { class: 'help' }, 'Ticket cost 0 = free entry by typing the keyword. With a cost, viewers buy tickets with !ticket <n>. Sub luck multiplies subscriber odds.'), btn('Start giveaway', () => api.action('raffle:start', f), 'primary')),
     card('Current giveaway', live)));
 }
 
 // Polls & bets
 function pagePolls(main, on) {
-  main.append(head('Polls & Bets'));
+  add(main, head('Polls & Bets'));
   const pq = h('input', { placeholder: 'Question' });
   const po = h('textarea', { placeholder: 'One option per line' });
   const ps = h('input', { type: 'number', placeholder: 'Duration (s, optional)' });
   const pollBox = h('div');
   const drawPoll = (p) => {
     p ||= null;
-    pollBox.replaceChildren(p
+    put(pollBox, p
       ? h('div', {}, h('b', {}, p.question), ' ', h('span', { class: 'pill' }, p.open ? 'open' : 'closed'),
           p.options.map((o, i) => h('div', { style: 'margin:8px 0' }, h('div', { class: 'row' }, `${i + 1}. ${o.text}`, h('span', { class: 'grow' }), `${o.votes}`), h('div', { class: 'bar' }, h('i', { style: `width:${p.total ? (o.votes / p.total) * 100 : 0}%` })))),
           p.open ? btn('End poll', () => api.action('poll:end'), 'primary') : null)
@@ -650,7 +662,7 @@ function pagePolls(main, on) {
   const bo = h('textarea', { placeholder: 'One outcome per line' });
   const betBox = h('div');
   const drawBets = (b) =>
-    betBox.replaceChildren(b
+    put(betBox, b
       ? h('div', {}, h('b', {}, b.question), ' ', h('span', { class: 'pill' }, b.open ? 'open' : 'locked'),
           b.options.map((o, i) => h('div', { class: 'row', style: 'margin:8px 0' }, `${i + 1}. ${o.text}`, h('span', { class: 'muted' }, `${fmt(o.pool)} from ${o.bettors}`), h('span', { class: 'grow' }), btn('Winner', () => confirm(`Pay out "${o.text}"?`) && api.action('bets:resolve', { option: i }), 'sm primary'))),
           h('div', { class: 'row' }, b.open ? btn('Lock bets', () => api.action('bets:lock')) : null, btn('Refund all', () => confirm('Refund everyone?') && api.action('bets:refund'), 'danger')))
@@ -658,38 +670,38 @@ function pagePolls(main, on) {
   drawBets(S.bets);
   on.bets = drawBets;
   const lines = (t) => t.value.split('\n').map((s) => s.trim()).filter(Boolean);
-  main.append(h('div', { class: 'grid2' },
+  add(main, h('div', { class: 'grid2' },
     h('div', {}, card('Chat poll', pq, h('div', { style: 'height:8px' }), po, h('div', { class: 'row', style: 'margin-top:8px' }, ps, btn('Start poll', () => api.action('poll:start', { question: pq.value, options: lines(po), seconds: ps.value }), 'primary'))), card('Live poll', pollBox)),
     h('div', {}, card(`Bets (with ${S.settings.loyalty.currencyName})`, bq, h('div', { style: 'height:8px' }), bo, h('div', { class: 'help' }, 'Viewers bet with !bet <option#> <amount>. Winners split the whole pot proportionally.'), btn('Open bets', () => api.action('bets:open', { question: bq.value, options: lines(bo) }), 'primary')), card('Live bets', betBox))));
 }
 
 // Queue
 function pageQuotes(main) {
-  main.append(head('Quotes'));
+  add(main, head('Quotes'));
   const quotes = structuredClone(S.quotes);
   const box = h('div');
   const draw = () =>
-    box.replaceChildren(quotes.length
+    put(box, quotes.length
       ? h('table', {}, h('tr', {}, ['#', 'Quote', 'Game', 'Date', ''].map((t) => h('th', {}, t))),
           quotes.map((q, i) => h('tr', {}, h('td', {}, q.id), h('td', {}, h('input', { value: q.text, oninput: (e) => (q.text = e.target.value) })), h('td', {}, h('input', { value: q.game || '', oninput: (e) => (q.game = e.target.value) })), h('td', { class: 'small' }, new Date(q.date).toLocaleDateString()), h('td', {}, btn('✕', () => (quotes.splice(i, 1), draw()), 'sm danger')))))
       : h('div', { class: 'empty' }, 'No quotes yet — mods add them with !addquote <text>.'));
   draw();
-  main.append(card(null, box, h('div', { class: 'row', style: 'margin-top:10px' },
+  add(main, card(null, box, h('div', { class: 'row', style: 'margin-top:10px' },
     btn('+ Add', () => { quotes.push({ id: Math.max(0, ...quotes.map((q) => q.id)) + 1, text: '', game: S.status.stream?.game || '', date: Date.now(), addedBy: 'dashboard' }); draw(); }),
     btn('Save quotes', async () => { S.quotes = await api.put('/api/quotes', quotes.filter((q) => q.text.trim())); toast('Saved ✓'); }, 'primary'))), settingsForm('quotes'));
 }
 
 // Achievements
 function pageAchievements(main) {
-  main.append(head('Achievements'), h('p', { class: 'muted' }, 'Viewers unlock these automatically. Unlocks are announced in chat, shown on the alert overlay and reward points.'));
-  main.append(settingsForm('achievements'), card('All achievements', h('div', { class: 'grid' }, S.achievements.map((a) => h('div', { class: 'stat' }, h('b', {}, `${a.icon} ${a.name}`), h('span', {}, a.desc))))));
+  add(main, head('Achievements'), h('p', { class: 'muted' }, 'Viewers unlock these automatically. Unlocks are announced in chat, shown on the alert overlay and reward points.'));
+  add(main, settingsForm('achievements'), card('All achievements', h('div', { class: 'grid' }, S.achievements.map((a) => h('div', { class: 'stat' }, h('b', {}, `${a.icon} ${a.name}`), h('span', {}, a.desc))))));
 }
 
 // Alerts
 function pageAlerts(main) {
-  main.append(head('Alerts & Events'));
-  main.append(card('Test alerts', h('div', { class: 'row' }, ['follow', 'sub', 'resub', 'giftsub', 'giftbomb', 'cheer', 'raid', 'redemption'].map((t) => btn(t, () => api.action('alert:test', { type: t }))))));
-  main.append(
+  add(main, head('Alerts & Events'));
+  add(main, card('Test alerts', h('div', { class: 'row' }, ['follow', 'sub', 'resub', 'giftsub', 'giftbomb', 'cheer', 'raid', 'redemption'].map((t) => btn(t, () => api.action('alert:test', { type: t }))))));
+  add(main, 
     h('div', { class: 'grid2' },
       settingsForm('events', { title: 'Chat messages for events' }),
       h('div', {},
@@ -701,16 +713,16 @@ function pageAlerts(main) {
 
 // Shop
 function pageShop(main) {
-  main.append(head('Shop & Effects'), h('p', { class: 'muted' }, 'Viewers spend loyalty points with !redeem <item> to trigger effects on the overlay. Effects: confetti, emoterain, tts, shake, spotlight.'));
+  add(main, head('Shop & Effects'), h('p', { class: 'muted' }, 'Viewers spend loyalty points with !redeem <item> to trigger effects on the overlay. Effects: confetti, emoterain, tts, shake, spotlight.'));
   const txt = h('input', { value: 'Hello from the dashboard!' });
-  main.append(card('Test effects', h('div', { class: 'row' }, txt, ['confetti', 'emoterain', 'tts', 'shake', 'spotlight'].map((e) => btn(e, () => api.action('effect:test', { effect: e, text: txt.value }))))), settingsForm('shop'));
+  add(main, card('Test effects', h('div', { class: 'row' }, txt, ['confetti', 'emoterain', 'tts', 'shake', 'spotlight'].map((e) => btn(e, () => api.action('effect:test', { effect: e, text: txt.value }))))), settingsForm('shop'));
 }
 
 // Hype
 function pageHype(main, on) {
-  main.append(head('Hype & Clips'));
+  add(main, head('Hype & Clips'));
   const meter = h('div');
-  const drawMeter = () => meter.replaceChildren(h('div', { class: 'row' }, h('div', { class: 'stat' }, h('b', {}, hypeNow.mpm), h('span', {}, 'msgs / min')), h('div', { class: 'stat' }, h('b', {}, `${hypeNow.score}x`), h('span', {}, 'vs baseline')), h('div', { class: 'grow' }, h('div', { class: 'bar', style: 'height:14px' }, h('i', { style: `width:${hypeNow.level * 100}%;background:var(--accent)` })))));
+  const drawMeter = () => put(meter, h('div', { class: 'row' }, h('div', { class: 'stat' }, h('b', {}, hypeNow.mpm), h('span', {}, 'msgs / min')), h('div', { class: 'stat' }, h('b', {}, `${hypeNow.score}x`), h('span', {}, 'vs baseline')), h('div', { class: 'grow' }, h('div', { class: 'bar', style: 'height:14px' }, h('i', { style: `width:${hypeNow.level * 100}%;background:var(--accent)` })))));
   drawMeter();
   on.hype = (d) => {
     hypeNow = d;
@@ -720,16 +732,16 @@ function pageHype(main, on) {
   const clips = h('div');
   const load = async () => {
     const [m, c] = await Promise.all([api.get('/api/hype'), api.get('/api/clips')]);
-    moments.replaceChildren(m.length
+    put(moments, m.length
       ? h('table', {}, h('tr', {}, ['When', 'Stream time', 'Speed', 'Top', 'Chat', 'Clip'].map((t) => h('th', {}, t))),
           m.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.offset, x.manual ? h('div', { class: 'tag' }, `📍 ${x.note || 'marker'}`) : null), h('td', {}, x.mpm ? `${x.mpm}/min (${x.score}x)` : ''), h('td', {}, (x.top || []).join(' ')), h('td', { class: 'small mono', style: 'max-width:380px' }, (x.sample || []).slice(-3).join(' / ')), h('td', {}, x.clip ? h('a', { href: x.clip, target: '_blank' }, 'watch') : ''))))
       : h('div', { class: 'empty' }, 'No hype moments yet. They are detected automatically while live, or saved with !marker.'));
-    clips.replaceChildren(c.length ? h('table', {}, c.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.by), h('td', {}, x.game || ''), h('td', {}, h('a', { href: x.url, target: '_blank' }, x.url))))) : h('div', { class: 'empty' }, 'No clips yet.'));
+    put(clips, c.length ? h('table', {}, c.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.by), h('td', {}, x.game || ''), h('td', {}, h('a', { href: x.url, target: '_blank' }, x.url))))) : h('div', { class: 'empty' }, 'No clips yet.'));
   };
   load();
   on['hype:moment'] = load;
   on.clip = load;
-  main.append(card('Live hype meter', meter), h('div', { class: 'grid2' }, settingsForm('hype'), settingsForm('clips', { title: '!clip command' })), card('Hype moments (with VOD timestamps)', moments), card('Clips', clips));
+  add(main, card('Live hype meter', meter), h('div', { class: 'grid2' }, settingsForm('hype'), settingsForm('clips', { title: '!clip command' })), card('Hype moments (with VOD timestamps)', moments), card('Clips', clips));
 }
 
 // Analytics
@@ -747,15 +759,15 @@ function spark(points, key, color) {
   path.setAttribute('fill', 'none');
   path.setAttribute('stroke', color);
   path.setAttribute('stroke-width', '2');
-  svg.append(path);
+  add(svg, path);
   return h('div', {}, h('div', { class: 'small muted' }, `${label(key)} (max ${max})`), svg);
 }
 function pageAnalytics(main) {
-  main.append(head('Analytics'));
+  add(main, head('Analytics'));
   const box = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
   api.get('/api/streams').then((list) => {
-    if (!list.length) return box.replaceChildren(h('div', { class: 'empty' }, 'Past streams will appear here after your first stream with the bot.'));
-    box.replaceChildren(...list.map((s) =>
+    if (!list.length) return put(box, h('div', { class: 'empty' }, 'Past streams will appear here after your first stream with the bot.'));
+    put(box, ...list.map((s) =>
       card(`${new Date(s.start).toLocaleDateString()} — ${s.title}`,
         h('div', { class: 'row' }, ...[[dur(s.duration), 'duration'], [s.peakViewers, 'peak viewers'], [s.avgViewers, 'avg viewers'], [fmt(s.messages), 'messages'], [s.uniqueChatters, 'chatters'], [s.follows, 'follows'], [s.subs + s.gifts, 'subs'], [fmt(s.bits), 'bits'], [s.hypeMoments, 'hype moments']].map(([v, l]) => h('div', { class: 'stat' }, h('b', {}, v), h('span', {}, l)))),
         s.recap ? h('p', { style: 'margin-top:12px' }, '✨ ', s.recap) : null,
@@ -763,7 +775,7 @@ function pageAnalytics(main) {
         h('div', { class: 'small muted', style: 'margin-top:8px' }, `Games: ${(s.games || []).join(', ') || s.game} · Top chatters: ${(s.topChatters || []).slice(0, 5).map((t) => `${t.user} (${t.n})`).join(', ')}`),
       )));
   });
-  main.append(box);
+  add(main, box);
 }
 
 // Overlays
@@ -771,7 +783,7 @@ function pageSettings(main) {
   void head;
   const counters = structuredClone(S.counters);
   const cBox = h('div', {}, Object.keys(counters).length ? Object.keys(counters).map((k) => field(counters, k, `counter.${k}`)) : h('div', { class: 'muted' }, 'No counters yet — use ${count name} in a command.'));
-  main.append(
+  add(main, 
     h('div', { class: 'grid2' },
       h('div', {}, settingsForm('general'), settingsForm('shoutout')),
       h('div', {},
@@ -791,21 +803,21 @@ function pageSettings(main) {
 
 // Logs
 function pageLogs(main, on) {
-  main.append(head('Logs'));
+  add(main, head('Logs'));
   const box = h('div', { class: 'logbox' });
   const add = (l) => {
-    box.append(h('div', { class: l.level }, `${new Date(l.t).toLocaleTimeString()} ${l.level.toUpperCase().padEnd(5)} ${l.msg}`));
+    add(box, h('div', { class: l.level }, `${new Date(l.t).toLocaleTimeString()} ${l.level.toUpperCase().padEnd(5)} ${l.msg}`));
     if (box.children.length > 500) box.firstChild.remove();
     box.scrollTop = box.scrollHeight;
   };
   logBuf.forEach(add);
   on.log = add;
-  main.append(card(null, box));
+  add(main, card(null, box));
 }
 
 // Mod Panel — remote access for the channel's moderators
 function pageModPanel(main, on) {
-  main.append(head('Mod Panel', 'Your Twitch mods can manage the bot from their browser while Steez is open.'));
+  add(main, head('Mod Panel', 'Your Twitch mods can manage the bot from their browser while Steez is open.'));
   const st = h('div');
   let status = null;
   const draw = (s) => {
@@ -813,7 +825,7 @@ function pageModPanel(main, on) {
     if (!status) return;
     const tone = status.state === 'online' ? 'good' : status.state === 'error' ? 'bad' : '';
     const text = { online: 'Live — mods can connect', connecting: 'Connecting…', off: status.enabled ? 'Not connected' : 'Turned off', error: 'Problem' }[status.state] || status.state;
-    st.replaceChildren(
+    put(st, 
       h('div', { class: 'row' }, h('span', { class: `pill ${tone}` }, text), status.detail ? h('span', { class: 'faint small grow' }, status.detail) : null, status.state !== 'online' && status.enabled ? btn('Reconnect', async () => draw(await api.action('modpanel:reconnect')), 'sm') : null),
       status.url
         ? h('div', { style: 'margin-top:14px' },
@@ -837,7 +849,7 @@ function pageModPanel(main, on) {
   const actBox = h('div');
   const acts = [];
   const drawActs = () =>
-    actBox.replaceChildren(acts.length
+    put(actBox, acts.length
       ? h('table', {}, h('tr', {}, ['When', 'Mod', 'What'].map((t) => h('th', {}, t))), acts.slice(0, 100).map((a) => h('tr', {}, h('td', { class: 'small faint' }, ago(a.t)), h('td', {}, h('b', {}, a.mod)), h('td', {}, a.summary))))
       : h('div', { class: 'empty' }, 'Nothing changed by mods yet.'));
   api.action('modpanel:activity').then((l) => {
@@ -849,7 +861,7 @@ function pageModPanel(main, on) {
     drawActs();
   };
 
-  main.append(
+  add(main, 
     h('div', { class: 'grid2' },
       h('div', {}, card('Status', st), settingsForm('modPanel', { title: 'What mods can change', onSaved: async () => draw(await api.action('modpanel:apply')) })),
       h('div', {}, card('Mod activity', h('div', { style: 'max-height:520px;overflow:auto' }, actBox)), setup)),
@@ -892,11 +904,11 @@ function render() {
   mounted.offs.forEach((f) => f());
   mounted.offs = [];
   const on = {};
-  el.replaceChildren();
+  put(el, );
   try {
     PAGES[id](el, on);
   } catch (e) {
-    el.append(card('Error', String(e.stack || e)));
+    add(el, card('Error', String(e.stack || e)));
   }
   // Live updates: page handlers declared in `on`
   const map = { chat: 'chat', log: 'log', hype: 'hype', status: 'status' };
@@ -914,7 +926,7 @@ function render() {
 export async function mountBotPage(id, el) {
   mounted = { id, el, offs: [] };
   const mine = mounted;
-  el.replaceChildren(h('div', { class: 'faint' }, 'Loading…'));
+  put(el, h('div', { class: 'faint' }, 'Loading…'));
   await reload(false);
   if (mounted !== mine) return () => {};
   hypeNow = buffers.hype;

@@ -75,7 +75,7 @@ export const defaultSettings = {
       lootPerParticipant: 150,
       autoSpawnMinutes: 0, // 0 = only spawn manually (!boss spawn or dashboard)
     },
-    trivia: { enabled: true, answerSeconds: 30, reward: 100, duringAdBreaks: true, useAI: false, autoIntervalMinutes: 0, aiTopic: '' },
+    trivia: { enabled: true, answerSeconds: 30, reward: 100, duringAdBreaks: true, useAI: true, autoIntervalMinutes: 0, aiTopic: '' },
     secretWord: { word: '', reward: 500 },
   },
   moderation: {

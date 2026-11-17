@@ -1,6 +1,7 @@
 // Points games: gamble, slots, duel, heist, roulette, fishing, daily check-in.
 import { db, save, findUser, getUser, bumpStat } from '../store.js';
 import { parseAmount, randInt, pick, weightedPick, fmtNum, normLogin, todayKey, fmtDuration } from '../util.js';
+import { keep, restore, resumeAt } from '../session.js';
 
 const FISH = [
   { tier: 'trash', weight: 22, names: ['an old boot', 'a soggy sock', 'a tin can', 'a tangle of seaweed', 'a rubber duck'], min: 0, max: 2, emoji: '🥾' },
@@ -145,6 +146,15 @@ export function init(bot) {
   // ─── Heist ──────────────────────────────────────────────────
   let heist = null;
   let heistCooldownUntil = 0;
+  const saveHeist = () => keep('heist', heist && { crew: [...heist.crew], endsAt: heist.endsAt });
+  {
+    // A heist that was gathering a crew when Steez closed carries on (the crew's points are in it).
+    const saved = restore('heist');
+    if (saved?.crew?.length) {
+      heist = { crew: new Map(saved.crew), endsAt: resumeAt(saved.endsAt) };
+      setTimeout(runHeist, Math.max(5000, heist.endsAt - Date.now()));
+    } else keep('heist', null);
+  }
   bot.command('heist', {
     description: 'Start or join a group heist',
     usage: '!heist <amount>',
@@ -159,20 +169,24 @@ export function init(bot) {
       if (!n) return false;
       bot.takePoints(ctx.user.login, n);
       if (!heist) {
-        heist = { crew: new Map() };
+        heist = { crew: new Map(), endsAt: Date.now() + cfg.joinSeconds * 1000 };
         heist.crew.set(ctx.user.login, { user: ctx.user, amount: n });
+        saveHeist();
         bot.say(`💰 ${ctx.user.display} is planning a heist! Join with !heist <amount> in the next ${cfg.joinSeconds}s.`);
         setTimeout(runHeist, cfg.joinSeconds * 1000);
       } else {
         heist.crew.set(ctx.user.login, { user: ctx.user, amount: n });
+        saveHeist();
         if (heist.crew.size % 3 === 0) bot.say(`💰 The crew grows to ${heist.crew.size}!`);
       }
     },
   });
   function runHeist() {
     const cfg = G().heist;
+    if (!heist) return;
     const crew = [...heist.crew.values()];
     heist = null;
+    saveHeist();
     heistCooldownUntil = Date.now() + cfg.cooldownMinutes * 60000;
     const tier = [...cfg.tiers].sort((a, b) => b.minPlayers - a.minPlayers).find((t) => crew.length >= t.minPlayers) || cfg.tiers[0];
     const survivors = [];
