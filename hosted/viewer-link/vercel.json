@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
+  "rewrites": [{ "source": "/:id([a-zA-Z0-9]+)", "destination": "/" }],
   "headers": [
-    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] },
     { "source": "/(.*)", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] }
   ]
 }

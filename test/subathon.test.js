@@ -29,6 +29,20 @@ class FakeTwitch extends EventEmitter {
 }
 const KEY = 'k3y';
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tsub-'));
+// A stand-in for the hosted viewer link (hosted/viewer-link), so tests never touch the real one.
+const linkPosts = [];
+const linkServer = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => (body += c));
+  req.on('end', () => {
+    linkPosts.push({ key: req.headers['x-steez-key'], ...JSON.parse(body || '{}') });
+    res.setHeader('content-type', 'application/json');
+    res.end('{"ok":true}');
+  });
+});
+await new Promise((r) => linkServer.listen(0, '127.0.0.1', r));
+linkServer.unref();
+const LINK_BASE = `http://127.0.0.1:${linkServer.address().port}`;
 const twitch = new FakeTwitch();
 const sub = createSubathon({
   dataDir,
@@ -38,8 +52,10 @@ const sub = createSubathon({
   lanHost: '127.0.0.1',
   twitch,
   donations: new Donations(),
+  viewerLinkBase: LINK_BASE,
 });
 sub.db.lan = { enabled: true, port: 0 };
+sub.db.hosted = { auto: false }; // never start a real Cloudflare tunnel in tests
 sub.db.settings.enabled = true;
 sub.db.settings.time.eventsAddTime = true; // most tests below exercise time being added
 await sub.start();
@@ -447,20 +463,29 @@ test('switching the subathon off stops everything, including the clock', async (
   assert.equal(sub.lanState().running, true);
 });
 
-test('short viewer link: the key never reaches a page, bad codes are refused', async () => {
-  const appReq2 = (method, p, body) =>
+test('viewer link: made by Steez itself, key never reaches a page, a new link retires the old one', async () => {
+  const req = (method, p, body) =>
     fetch(APP + p, { method, headers: { 'x-steez-key': KEY, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  const bad = await appReq2('PUT', '/api/hosted', { code: 'not a code' });
-  assert.equal(bad.status, 400);
-  const secret = 'S3cretKeyThatMustNeverLeak_123456';
-  sub.db.hosted = { link: 'https://example.invalid', key: secret };
-  try {
-    const admin = await (await appReq2('GET', '/api/admin/state')).text();
-    assert.ok(!admin.includes(secret), 'admin state has no key');
-    assert.match(admin, /example\.invalid/, 'but it has the link');
-    const pub = await (await fetch(LAN + '/api/public')).text();
-    assert.ok(!pub.includes(secret) && !pub.includes('example.invalid'));
-  } finally {
-    sub.db.hosted = { link: '', key: '' };
-  }
+  const state = await (await req('GET', '/api/admin/state')).json();
+  const { id, key } = sub.db.hosted;
+  assert.match(id, /^[a-z0-9]{7}$/);
+  assert.ok(key.length >= 24);
+  assert.equal(state.hosted.link, LINK_BASE + '/' + id, 'the full link is ready to copy');
+  assert.equal(state.hosted.auto, false);
+  const raw = JSON.stringify(state);
+  assert.ok(!raw.includes(key), 'admin state never has the key');
+  const pub = await fetch(LAN + '/api/public');
+  assert.equal(pub.headers.get('access-control-allow-origin'), '*', 'the link page may check this Steez is up');
+  assert.ok(!(await pub.text()).includes(key));
+
+  linkPosts.length = 0;
+  const r = await (await req('POST', '/api/hosted/new')).json();
+  assert.ok(r.hosted.link && !r.hosted.link.endsWith(id), 'a different link');
+  assert.notEqual(sub.db.hosted.key, key);
+  assert.deepEqual([linkPosts[0].id, linkPosts[0].key, linkPosts[0].url], [id, key, ''], 'the old link was told it is offline');
+
+  await req('PUT', '/api/hosted', { auto: false });
+  sub.db.settings.enabled = false;
+  assert.equal((await (await req('GET', '/api/admin/state')).json()).hosted.link, '', 'no link while the subathon is off');
+  sub.db.settings.enabled = true;
 });

@@ -305,6 +305,7 @@ export function mountSubathonPage(root) {
       h('span', { class: 'pill ' + toneOf(tw.status), title: tw.detail || '' }, 'Twitch chat'),
       h('span', { class: 'pill ' + (dn.status === 'off' ? '' : toneOf(dn.status)), title: dn.detail || '' }, 'Donations'),
       h('span', { class: 'pill ' + (tvs() > 0 ? 'good' : '') }, tvs() > 0 ? tvs() + ' TV screen' + (tvs() > 1 ? 's' : '') + ' on' : 'No TV connected'),
+      shortLink() ? btn('Copy viewer link', copyViewerLink, 'sm primary') : null,
       lanOn() && S.tvCode && lan()[0] ? btn('Open TV screen ↗', () => openUrl(lan()[0] + '/tv/' + S.tvCode), 'sm') : null,
       lanOn() && lan()[0] ? btn('Open viewer page ↗', () => openUrl(lan()[0] + '/'), 'sm') : null);
     tvCount2.textContent = tvs();
@@ -392,7 +393,10 @@ export function mountSubathonPage(root) {
   }
 
   // Link rows
-  const shortLink = () => (S.hosted && S.hosted.connected ? S.hosted.link : '');
+  const shortLink = () => (S.hosted && S.hosted.link) || '';
+  const copyViewerLink = () =>
+    window.steez.copy(shortLink()).then(() =>
+      toast(lanOn() ? 'Viewer link copied. Paste it in chat or your Twitch panels.' : 'Viewer link copied. It shows a waiting screen until the TV & viewer server is on.'));
   function linkRow(url) {
     const input = h('input', { type: 'text', readonly: true, value: url, onfocus: (e) => e.target.select() });
     return h('div', { class: 'row smp-link' }, input, btn('Copy', () => copy(url), 'sm'), btn('Open', () => openUrl(url), 'sm'));
@@ -872,7 +876,12 @@ export function mountSubathonPage(root) {
   const viewerBox = h('div');
   const tunnelBox = h('div');
   const hostedBox = h('div');
-  const hostedCode = h('input', { type: 'password', placeholder: 'Paste your link code (https://….vercel.app#k=…)', autocomplete: 'off' });
+  const hostedAuto = h('input', { type: 'checkbox' });
+  hostedAuto.addEventListener('change', safe(async () => {
+    const r = await api.put(A('/hosted'), { auto: hostedAuto.checked });
+    S.hosted = r.hosted;
+    renderScreens();
+  }));
   const kofiBox = h('div');
   const remoteBox = h('div');
 
@@ -926,7 +935,7 @@ export function mountSubathonPage(root) {
         card('Viewer page', viewerBox),
         ovCard),
       h('div', {},
-        card('Short viewer link', hostedBox),
+        card('Share with viewers', hostedBox),
         card('Internet tunnel', tunnelBox),
         card('Ko-fi webhook', kofiBox),
         card('Fix TV connection',
@@ -1020,34 +1029,41 @@ export function mountSubathonPage(root) {
   }
   function renderHosted() {
     const H = S.hosted || {};
-    if (!H.connected) {
-      put(hostedBox,
-        h('p', { class: 'muted', style: 'margin-top:0' }, 'One short link for your viewers that never changes, even though the tunnel’s address does. While the subathon is online it shows your live viewer page; while it’s off, viewers see a waiting screen that connects by itself.'),
-        h('div', { class: 'row' }, hostedCode, btn('Connect', safe(async () => {
-          const r = await api.put(A('/hosted'), { code: hostedCode.value });
-          hostedCode.value = '';
-          S.hosted = r.hosted;
-          renderScreens();
-          renderDashScreens();
-          toast(r.ok ? 'Short link connected' : 'Saved, but the link said: ' + (r.hosted.error || 'error'));
-        }), 'primary')));
+    if (!H.link) {
+      put(hostedBox, h('p', { class: 'muted', style: 'margin:0' }, 'Turn on the subathon to get your viewer link.'));
       return;
     }
-    const st = H.status;
-    const pill = st === 'online' ? ['good', 'Showing your live page'] : st === 'error' ? ['bad', 'Problem'] : ['', st === 'offline' ? 'Waiting screen (tunnel off)' : 'Connected'];
+    hostedAuto.checked = H.auto !== false;
+    const T = S.tunnel || {};
+    const st = H.status === 'error' ? 'error' : T.state === 'up' && H.status === 'online' ? 'live' : T.state === 'starting' || T.state === 'installing' ? 'starting' : 'waiting';
+    const pill = { live: ['good', 'Live: viewers see your page'], starting: ['warn', 'Going online…'], error: ['bad', 'Problem'], waiting: ['', 'Waiting screen'] }[st];
+    const why =
+      st === 'error' ? H.error
+      : st === 'waiting' && !lanOn() ? 'Turn on the TV & viewer server to go live.'
+      : st === 'waiting' && H.auto === false ? 'Start the internet tunnel below to go live.'
+      : '';
     put(hostedBox,
-      linkRow(H.link),
-      h('div', { class: 'row', style: 'margin-top:8px' },
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Your own link for viewers. It never changes: while the subathon is online it shows your live viewer page, and while it’s off viewers see a waiting screen that connects by itself.'),
+      h('div', { class: 'row smp-link' },
+        h('input', { type: 'text', readonly: true, value: H.link, onfocus: (e) => e.target.select() }),
+        btn('Copy link', copyViewerLink, 'primary'),
+        btn('Open', () => openUrl(H.link), 'sm')),
+      h('div', { class: 'row', style: 'margin-top:10px' },
         h('span', { class: 'pill ' + pill[0] }, pill[1]),
-        H.error ? h('span', { class: 'faint small grow' }, H.error) : h('span', { class: 'grow' }),
-        btn('Disconnect', safe(async () => {
-          if (!confirm('Disconnect the short link? Viewers who open it will see the waiting screen until you connect it again.')) return;
-          const r = await api.del(A('/hosted'));
+        why ? h('span', { class: 'faint small grow' }, why) : h('span', { class: 'grow' })),
+      h('div', { class: 'divider' }),
+      check(hostedAuto, 'Go online automatically while the TV & viewer server is on'),
+      hint('Uses the internet tunnel below. The first time, Steez installs cloudflared for it (one time, via winget).'),
+      h('div', { class: 'row', style: 'margin-top:6px' },
+        btn('Make a new link', safe(async () => {
+          if (!confirm('Make a new viewer link? The old link stops working for good (it shows the waiting screen), so update it wherever you shared it.')) return;
+          const r = await api.post(A('/hosted/new'));
           S.hosted = r.hosted;
           renderScreens();
           renderDashScreens();
-        }), 'sm danger')),
-      hint('Steez starts the internet tunnel by itself while the TV & viewer server is on, and tells this link where to find it.'));
+          renderStatus();
+          toast('New viewer link made');
+        }), 'sm ghost')));
   }
 
   async function tunnel(action) {
@@ -1430,6 +1446,7 @@ export function mountSubathonPage(root) {
           S.hosted = m.hosted;
           renderScreens();
           renderDashScreens();
+          renderStatus();
         }
         break;
       default:

@@ -13,13 +13,14 @@
     body.live iframe { display: block; }
     body.live .wait { display: none; }
     .wait { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; text-align: center; }
-    .card { max-width: 420px; }
+    .card { max-width: 440px; }
     .mark { font-weight: 800; font-size: 34px; letter-spacing: -0.03em; }
     .mark span { color: var(--accent); }
     h1 { font-size: 20px; margin: 22px 0 6px; font-weight: 650; letter-spacing: -0.01em; }
     p { color: var(--text-2); margin: 0; }
     .pulse { display: inline-flex; align-items: center; gap: 10px; margin-top: 22px; padding: 7px 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13px; }
     .pulse i { width: 8px; height: 8px; border-radius: 99px; background: var(--accent); animation: beat 1.6s ease-in-out infinite; }
+    .pulse.off i { animation: none; background: #4a4c63; }
     @keyframes beat { 50% { opacity: .25; transform: scale(.7); } }
     @media (prefers-reduced-motion: reduce) { .pulse i { animation: none; } }
   </style>
@@ -30,36 +31,59 @@
       <div class="mark">Steez<span>.</span></div>
       <h1 id="msg">Connecting to the subathon…</h1>
       <p id="sub">One moment.</p>
-      <div class="pulse"><i></i><span id="state">Checking</span></div>
+      <div class="pulse" id="pulse"><i></i><span id="state">Checking</span></div>
     </div>
   </div>
   <iframe id="view" title="Subathon" allow="autoplay; fullscreen"></iframe>
   <script>
-    var current = '';
+    var id = (location.pathname.split('/')[1] || '').toLowerCase();
     var view = document.getElementById('view');
+    var current = '';
+    var timer = null;
+    function $(x) { return document.getElementById(x); }
+    function show(msg, sub, state, waiting) {
+      document.body.classList.remove('live');
+      if (current) { view.removeAttribute('src'); current = ''; }
+      $('msg').textContent = msg;
+      $('sub').textContent = sub;
+      $('state').textContent = state;
+      $('pulse').className = 'pulse' + (waiting ? '' : ' off');
+    }
     function name(d) {
       return d.channel ? d.channel + '’s subathon' : d.title && d.title.toLowerCase() !== 'subathon' ? d.title : 'The subathon';
     }
     function offline(d) {
-      document.body.classList.remove('live');
-      if (current) { view.removeAttribute('src'); current = ''; }
-      document.getElementById('msg').textContent = name(d || {}) + ' is offline right now';
-      document.getElementById('sub').textContent = 'This page connects by itself as soon as it goes live. No need to refresh.';
-      document.getElementById('state').textContent = 'Waiting for the stream';
+      show(name(d || {}) + ' is offline right now', 'This page connects by itself as soon as it goes live. No need to refresh.', 'Waiting for the stream', true);
     }
+    // Is the streamer's Steez actually reachable? Asked straight from this browser.
+    function reachable(url) {
+      var ctl = window.AbortController ? new AbortController() : null;
+      var t = setTimeout(function () { if (ctl) ctl.abort(); }, 6000);
+      return fetch(url + '/api/public', { cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+        .then(function (r) { clearTimeout(t); return r.ok; })
+        .catch(function () { clearTimeout(t); return false; });
+    }
+    function next(ms) { clearTimeout(timer); timer = setTimeout(check, ms); }
     function check() {
-      fetch('/api/where', { cache: 'no-store' })
+      fetch('/api/where?id=' + encodeURIComponent(id))
         .then(function (r) { return r.json(); })
         .then(function (d) {
           document.title = d.channel ? d.channel + ' — subathon' : 'Subathon';
-          if (!d.online || !d.url) return offline(d);
-          if (d.url !== current) { current = d.url; view.src = d.url + '/'; }
-          document.body.classList.add('live');
+          if (!d.online || !d.url) { offline(d); return next(20000); }
+          if (d.url === current) return next(60000);
+          return reachable(d.url).then(function (ok) {
+            if (!ok) { offline(d); return next(20000); }
+            current = d.url;
+            view.src = d.url + '/';
+            document.body.classList.add('live');
+            next(60000);
+          });
         })
-        .catch(function () { if (!current) offline({}); });
+        .catch(function () { if (!current) offline({}); next(30000); });
     }
-    check();
-    setInterval(check, 20000);
+    if (!/^[a-z0-9]{6,12}$/.test(id)) {
+      show('This is a Steez subathon link', 'Ask the streamer for their full link. It ends with their own code, like /k7q2mx9.', 'No link code', false);
+    } else check();
   </script>
 </body>
 </html>

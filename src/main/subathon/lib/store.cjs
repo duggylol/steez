@@ -22,7 +22,7 @@ function defaults() {
     lan: { enabled: false, port: 3000 },
     // Steez only: a short viewer link hosted on Vercel (hosted/viewer-link). Steez tells it the
     // tunnel's current address; the key proves it's this Steez. Never sent to any page.
-    hosted: { link: '', key: '' },
+    hosted: { id: '', key: '', auto: true },
     settings: {
       enabled: false, // Steez: the whole subathon is off until the streamer turns it on
       channel: '', // blank = the Twitch account logged into Steez

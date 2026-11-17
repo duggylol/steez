@@ -689,6 +689,7 @@ function createSubathon(opts) {
     store.save();
     applyConnections();
     await restartLan();
+    introduceHosted();
   }
 
   // ---------------------------------------------------------------- settings
@@ -1073,31 +1074,22 @@ function createSubathon(opts) {
         }
       });
       r.put('/api/hosted', requireAdmin, async (req, res) => {
-        try {
-          const { link, key } = parseLinkCode((req.body || {}).code);
-          D().hosted = { link, key };
-          store.save();
-          Object.assign(hostedState, { status: 'idle', at: 0, error: '' });
-          hostedUrl = '';
-          const t = tunnel.state();
-          if (t.state === 'up') onTunnelForHosted(t);
-          else {
-            await publishHosted(''); // checks the code right away
-            maybeAutoTunnel();
-          }
-          res.json({ ok: hostedState.status !== 'error', hosted: hostedOut() });
-        } catch (e) {
-          res.status(400).json({ error: e.message });
-        }
-      });
-      r.delete('/api/hosted', requireAdmin, async (req, res) => {
-        await publishHosted('').catch(() => {});
-        clearInterval(hostedBeat);
-        hostedBeat = null;
-        hostedUrl = '';
-        D().hosted = { link: '', key: '' };
+        const h = hostedConf();
+        if (typeof (req.body || {}).auto === 'boolean') h.auto = req.body.auto;
         store.save();
+        if (h.auto) maybeAutoTunnel();
+        pushHosted();
+        res.json({ ok: true, hosted: hostedOut() });
+      });
+      // A new link: the old one goes to its waiting screen for good, this Steez gets a fresh id and key.
+      r.post('/api/hosted/new', requireAdmin, async (req, res) => {
+        const old = { ...hostedConf() };
+        await publishHosted('', old).catch(() => {});
+        D().hosted = { auto: old.auto !== false };
+        store.save();
+        hostedConf();
         Object.assign(hostedState, { status: 'idle', at: 0, error: '' });
+        if (hostedUrl && isOn()) await publishHosted(hostedUrl);
         pushHosted();
         res.json({ ok: true, hosted: hostedOut() });
       });
@@ -1184,7 +1176,10 @@ function createSubathon(opts) {
     app.disable('x-powered-by');
     app.set('trust proxy', true); // the Cloudflare tunnel
     app.use(apiRouter({ keyAuth: false }));
-    app.get('/api/public', (req, res) => res.json(publicState()));
+    app.get('/api/public', (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*'); // the viewer link page checks this from another site
+      res.json(publicState());
+    });
     app.post('/webhook/kofi', express.urlencoded({ extended: false, limit: '1mb' }), express.json({ limit: '1mb' }), (req, res) => {
       if (D().settings.donation.provider !== 'kofi') return res.status(404).end();
       const ok = donations.handleKofi(req.body || {}, D().settings.donation.kofiToken);
@@ -1272,38 +1267,49 @@ function createSubathon(opts) {
     },
   });
 
-  // ---------------------------------------------------------------- short viewer link (Steez)
-  // A link on Vercel that always shows the live viewer page: Steez tells it the tunnel's current
-  // address (it changes every time the tunnel starts), re-says it every few minutes while online,
-  // and says "offline" when the tunnel stops or Steez closes.
+  // ---------------------------------------------------------------- viewer link (Steez)
+  // Every Steez with the subathon on has its own short link, https://<link site>/<id>. Steez makes the
+  // id and a secret key itself the first time; the key proves later updates come from this Steez.
+  // When the internet tunnel starts or stops, Steez tells the link the tunnel's address (it changes
+  // every time); viewers who open the link see the live viewer page, or a waiting screen.
+  const LINK_BASE = String(opts.viewerLinkBase || 'https://stz-zmw9s.vercel.app').replace(/\/$/, '');
   const hostedState = { status: 'idle', at: 0, error: '' };
-  let hostedBeat = null;
   let hostedUrl = '';
-  const hostedConf = () => D().hosted || {};
-  const hostedOn = () => !!(hostedConf().link && hostedConf().key);
+  function hostedConf() {
+    const db = D();
+    if (!db.hosted || !db.hosted.id || !db.hosted.key) {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      const bytes = crypto.randomBytes(7);
+      let id = '';
+      for (const b of bytes) id += chars[b % chars.length];
+      db.hosted = { id, key: crypto.randomBytes(24).toString('base64url'), auto: db.hosted?.auto !== false };
+      store.save();
+    }
+    return db.hosted;
+  }
+  const hostedLink = () => LINK_BASE + '/' + hostedConf().id;
   function hostedOut() {
-    return { link: hostedConf().link || '', connected: hostedOn(), ...hostedState };
+    return { link: isOn() ? hostedLink() : '', auto: hostedConf().auto !== false, ...hostedState };
   }
   function pushHosted() {
     sendTo('admin', { t: 'hosted', hosted: hostedOut() });
     emitLocal({ t: 'hosted', hosted: hostedOut() });
   }
-  async function publishHosted(url) {
-    if (!hostedOn()) return;
-    const h = hostedConf();
+  async function publishHosted(url, conf) {
+    const h = conf || hostedConf();
     try {
-      const r = await fetch(h.link + '/api/where', {
+      const r = await fetch(LINK_BASE + '/api/where', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-steez-key': h.key },
-        body: JSON.stringify({ url: url || '', title: D().settings.title || '', channel: effectiveChannel() || '' }),
+        body: JSON.stringify({ id: h.id, url: url || '', title: D().settings.title || '', channel: effectiveChannel() || '' }),
         signal: AbortSignal.timeout(10000),
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(r.status === 401 ? 'The link code is wrong — paste it again.' : j.error || 'HTTP ' + r.status);
+      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
       Object.assign(hostedState, { status: url ? 'online' : 'offline', at: Date.now(), error: '' });
     } catch (e) {
       Object.assign(hostedState, { status: 'error', at: Date.now(), error: e.message || String(e) });
-      log.warn?.('Short viewer link: ' + hostedState.error);
+      log.warn?.('Viewer link: ' + hostedState.error);
     }
     pushHosted();
   }
@@ -1311,19 +1317,17 @@ function createSubathon(opts) {
     const url = t.state === 'up' ? t.url : '';
     if (url === hostedUrl) return;
     hostedUrl = url;
-    clearInterval(hostedBeat);
-    hostedBeat = null;
+    // Going offline is always reported; going online only while the subathon is on.
+    if (url && !isOn()) return;
     publishHosted(url);
-    if (url) hostedBeat = setInterval(() => publishHosted(hostedUrl), 4 * 60 * 1000);
   }
-  /** With a short link connected, the tunnel comes on with the server (the link needs it). */
+  /** Once per launch with the subathon on: claim the link and give its waiting screen the channel name. */
+  function introduceHosted() {
+    if (isOn() && !hostedState.at) publishHosted(hostedUrl);
+  }
+  /** With the subathon on, the tunnel comes on with the TV & viewer server (the link needs it). */
   function maybeAutoTunnel() {
-    if (hostedOn() && lan.server && tunnel.state().state === 'off') tunnel.start();
-  }
-  function parseLinkCode(code) {
-    const m = /^(https:\/\/[a-z0-9.-]+)\/?#(?:k(?:ey)?=)?([A-Za-z0-9_-]{20,})$/i.exec(String(code || '').trim());
-    if (!m) throw new Error('That isn’t a link code. It looks like https://stz-xxxxx.vercel.app#k=… — paste the whole thing.');
-    return { link: m[1].toLowerCase(), key: m[2] };
+    if (isOn() && hostedConf().auto !== false && lan.server && tunnel.state().state === 'off') tunnel.start();
   }
 
   // ---------------------------------------------------------------- TikTok gifts (Steez)
@@ -1411,11 +1415,11 @@ function createSubathon(opts) {
   // ---------------------------------------------------------------- lifecycle
   async function start() {
     applyConnections();
+    introduceHosted();
     if (D().lan.enabled && isOn()) await startLan();
   }
   async function close() {
     for (const i of intervals) clearInterval(i);
-    clearInterval(hostedBeat);
     if (hostedUrl) await Promise.race([publishHosted(''), new Promise((r) => setTimeout(r, 3000))]);
     tunnel.stop();
     try {
