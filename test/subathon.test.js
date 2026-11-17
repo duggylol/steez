@@ -446,3 +446,21 @@ test('switching the subathon off stops everything, including the clock', async (
   await sub.setEnabled(true);
   assert.equal(sub.lanState().running, true);
 });
+
+test('short viewer link: the key never reaches a page, bad codes are refused', async () => {
+  const appReq2 = (method, p, body) =>
+    fetch(APP + p, { method, headers: { 'x-steez-key': KEY, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const bad = await appReq2('PUT', '/api/hosted', { code: 'not a code' });
+  assert.equal(bad.status, 400);
+  const secret = 'S3cretKeyThatMustNeverLeak_123456';
+  sub.db.hosted = { link: 'https://example.invalid', key: secret };
+  try {
+    const admin = await (await appReq2('GET', '/api/admin/state')).text();
+    assert.ok(!admin.includes(secret), 'admin state has no key');
+    assert.match(admin, /example\.invalid/, 'but it has the link');
+    const pub = await (await fetch(LAN + '/api/public')).text();
+    assert.ok(!pub.includes(secret) && !pub.includes('example.invalid'));
+  } finally {
+    sub.db.hosted = { link: '', key: '' };
+  }
+});

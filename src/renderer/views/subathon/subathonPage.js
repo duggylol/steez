@@ -392,6 +392,7 @@ export function mountSubathonPage(root) {
   }
 
   // Link rows
+  const shortLink = () => (S.hosted && S.hosted.connected ? S.hosted.link : '');
   function linkRow(url) {
     const input = h('input', { type: 'text', readonly: true, value: url, onfocus: (e) => e.target.select() });
     return h('div', { class: 'row smp-link' }, input, btn('Copy', () => copy(url), 'sm'), btn('Open', () => openUrl(url), 'sm'));
@@ -413,9 +414,10 @@ export function mountSubathonPage(root) {
       h('div', { class: 'divider' }),
       h('b', {}, 'Viewer page'),
       hint('Share this with your viewers (Twitch panels / a chat command).'),
-      pub ? linkRow(pub + '/') : null,
-      ...lan().slice(0, pub ? 1 : 2).map((u) => linkRow(u + '/')),
-      !pub ? hint('LAN links only work on your home Wi-Fi. Start the internet tunnel on Screens & links to share it with viewers.') : null);
+      shortLink() ? linkRow(shortLink()) : null,
+      !shortLink() && pub ? linkRow(pub + '/') : null,
+      ...(shortLink() ? [] : lan().slice(0, pub ? 1 : 2).map((u) => linkRow(u + '/'))),
+      !pub && !shortLink() ? hint('LAN links only work on your home Wi-Fi. Add a short viewer link on Screens & links to share it with viewers.') : null);
   }
 
   // ═══ MEDIA ═════════════════════════════════════════════════
@@ -869,6 +871,8 @@ export function mountSubathonPage(root) {
   const tvBox = h('div');
   const viewerBox = h('div');
   const tunnelBox = h('div');
+  const hostedBox = h('div');
+  const hostedCode = h('input', { type: 'password', placeholder: 'Paste your link code (https://….vercel.app#k=…)', autocomplete: 'off' });
   const kofiBox = h('div');
   const remoteBox = h('div');
 
@@ -922,6 +926,7 @@ export function mountSubathonPage(root) {
         card('Viewer page', viewerBox),
         ovCard),
       h('div', {},
+        card('Short viewer link', hostedBox),
         card('Internet tunnel', tunnelBox),
         card('Ko-fi webhook', kofiBox),
         card('Fix TV connection',
@@ -974,11 +979,13 @@ export function mountSubathonPage(root) {
         linkRow(`http://127.0.0.1:${S.lan.port}/tv/${S.tvCode}?obs=1`));
       put(viewerBox, 
         hint('Share this with your viewers (put it in your Twitch panels / chat command).'),
+        shortLink() ? linkRow(shortLink()) : null,
         pub ? linkRow(pub + '/') : null,
         ...lan().map((u) => linkRow(u + '/')),
         !pub ? hint('LAN links only work on your home Wi-Fi. To share it with viewers, start the internet tunnel and use it as your public address.') : null);
     }
 
+    renderHosted();
     const tState = T.state || 'off';
     const busy = tState === 'installing' || tState === 'starting';
     put(tunnelBox, 
@@ -1011,6 +1018,38 @@ export function mountSubathonPage(root) {
       h('p', { class: 'muted', style: 'margin-top:0' }, 'For Ko-fi donations: ko-fi.com → Settings → API → paste this webhook URL, then copy the verification token into Settings → Donations. Ko-fi has to reach this address from the internet, so use the tunnel or your own public address.'),
       kbase ? linkRow(kbase + '/webhook/kofi') : h('div', { class: 'faint' }, 'Turn on the TV & viewer server first.'));
   }
+  function renderHosted() {
+    const H = S.hosted || {};
+    if (!H.connected) {
+      put(hostedBox,
+        h('p', { class: 'muted', style: 'margin-top:0' }, 'One short link for your viewers that never changes, even though the tunnel’s address does. While the subathon is online it shows your live viewer page; while it’s off, viewers see a waiting screen that connects by itself.'),
+        h('div', { class: 'row' }, hostedCode, btn('Connect', safe(async () => {
+          const r = await api.put(A('/hosted'), { code: hostedCode.value });
+          hostedCode.value = '';
+          S.hosted = r.hosted;
+          renderScreens();
+          renderDashScreens();
+          toast(r.ok ? 'Short link connected' : 'Saved, but the link said: ' + (r.hosted.error || 'error'));
+        }), 'primary')));
+      return;
+    }
+    const st = H.status;
+    const pill = st === 'online' ? ['good', 'Showing your live page'] : st === 'error' ? ['bad', 'Problem'] : ['', st === 'offline' ? 'Waiting screen (tunnel off)' : 'Connected'];
+    put(hostedBox,
+      linkRow(H.link),
+      h('div', { class: 'row', style: 'margin-top:8px' },
+        h('span', { class: 'pill ' + pill[0] }, pill[1]),
+        H.error ? h('span', { class: 'faint small grow' }, H.error) : h('span', { class: 'grow' }),
+        btn('Disconnect', safe(async () => {
+          if (!confirm('Disconnect the short link? Viewers who open it will see the waiting screen until you connect it again.')) return;
+          const r = await api.del(A('/hosted'));
+          S.hosted = r.hosted;
+          renderScreens();
+          renderDashScreens();
+        }), 'sm danger')),
+      hint('Steez starts the internet tunnel by itself while the TV & viewer server is on, and tells this link where to find it.'));
+  }
+
   async function tunnel(action) {
     const r = await api.post(A('/tunnel'), { action });
     if (r && r.tunnel) {
@@ -1384,6 +1423,13 @@ export function mountSubathonPage(root) {
         if (S) {
           S.tunnel = m.tunnel;
           renderScreens();
+        }
+        break;
+      case 'hosted':
+        if (S) {
+          S.hosted = m.hosted;
+          renderScreens();
+          renderDashScreens();
         }
         break;
       default:

@@ -20,6 +20,9 @@ function defaults() {
     // Steez only: the TV & viewer server on the home network (off until the streamer turns it on,
     // so Windows doesn't ask about the firewall for people who never run a subathon).
     lan: { enabled: false, port: 3000 },
+    // Steez only: a short viewer link hosted on Vercel (hosted/viewer-link). Steez tells it the
+    // tunnel's current address; the key proves it's this Steez. Never sent to any page.
+    hosted: { link: '', key: '' },
     settings: {
       enabled: false, // Steez: the whole subathon is off until the streamer turns it on
       channel: '', // blank = the Twitch account logged into Steez
@@ -153,10 +156,12 @@ function createDb(dataDir, log) {
     /** Replace everything with data from the standalone app (keeps Steez-only fields). */
     importFrom(data) {
       const lan = db.lan;
+      const hosted = db.hosted;
       const enabled = db.settings.enabled; // importing doesn't switch the subathon on or off
       db = merge(defaults(), data);
       db.lan = merge(lan, data.lan || {});
       db.settings.enabled = enabled;
+      db.hosted = hosted;
       write();
     },
   };

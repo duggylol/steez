@@ -312,7 +312,7 @@ function createSubathon(opts) {
   }
   function adminState() {
     // eslint-disable-next-line no-unused-vars
-    const { auth, ...rest } = D();
+    const { auth, hosted, ...rest } = D();
     statuses.tvs = tvCount();
     const urls = lanUrls();
     return {
@@ -324,6 +324,7 @@ function createSubathon(opts) {
       chat: recentChat.slice(-40),
       lan: lanState(),
       tunnel: tunnel.state(),
+      hosted: hostedOut(),
       hasPassword: !!auth.hash,
       twitchLogin: twitchLogin(),
       channelInUse: effectiveChannel(),
@@ -1071,6 +1072,35 @@ function createSubathon(opts) {
           res.status(500).json({ error: e.message });
         }
       });
+      r.put('/api/hosted', requireAdmin, async (req, res) => {
+        try {
+          const { link, key } = parseLinkCode((req.body || {}).code);
+          D().hosted = { link, key };
+          store.save();
+          Object.assign(hostedState, { status: 'idle', at: 0, error: '' });
+          hostedUrl = '';
+          const t = tunnel.state();
+          if (t.state === 'up') onTunnelForHosted(t);
+          else {
+            await publishHosted(''); // checks the code right away
+            maybeAutoTunnel();
+          }
+          res.json({ ok: hostedState.status !== 'error', hosted: hostedOut() });
+        } catch (e) {
+          res.status(400).json({ error: e.message });
+        }
+      });
+      r.delete('/api/hosted', requireAdmin, async (req, res) => {
+        await publishHosted('').catch(() => {});
+        clearInterval(hostedBeat);
+        hostedBeat = null;
+        hostedUrl = '';
+        D().hosted = { link: '', key: '' };
+        store.save();
+        Object.assign(hostedState, { status: 'idle', at: 0, error: '' });
+        pushHosted();
+        res.json({ ok: true, hosted: hostedOut() });
+      });
       r.post('/api/import', requireAdmin, async (req, res) => {
         try {
           if (!opts.pickImport) throw new Error('Not available here');
@@ -1214,6 +1244,7 @@ function createSubathon(opts) {
       lan.error = '';
       s.on('error', (e) => log.warn?.('Subathon server: ' + e.message));
       log.info?.(`Subathon TV & viewer server on port ${lan.port}`);
+      maybeAutoTunnel();
     } catch (e) {
       lan.error = e.code === 'EADDRINUSE' ? `Port ${port} is already in use by another program — pick another port.` : e.message;
       log.warn?.('Subathon server could not start: ' + lan.error);
@@ -1237,8 +1268,63 @@ function createSubathon(opts) {
     onChange: (t) => {
       sendTo('admin', { t: 'tunnel', tunnel: t });
       emitLocal({ t: 'tunnel', tunnel: t });
+      onTunnelForHosted(t);
     },
   });
+
+  // ---------------------------------------------------------------- short viewer link (Steez)
+  // A link on Vercel that always shows the live viewer page: Steez tells it the tunnel's current
+  // address (it changes every time the tunnel starts), re-says it every few minutes while online,
+  // and says "offline" when the tunnel stops or Steez closes.
+  const hostedState = { status: 'idle', at: 0, error: '' };
+  let hostedBeat = null;
+  let hostedUrl = '';
+  const hostedConf = () => D().hosted || {};
+  const hostedOn = () => !!(hostedConf().link && hostedConf().key);
+  function hostedOut() {
+    return { link: hostedConf().link || '', connected: hostedOn(), ...hostedState };
+  }
+  function pushHosted() {
+    sendTo('admin', { t: 'hosted', hosted: hostedOut() });
+    emitLocal({ t: 'hosted', hosted: hostedOut() });
+  }
+  async function publishHosted(url) {
+    if (!hostedOn()) return;
+    const h = hostedConf();
+    try {
+      const r = await fetch(h.link + '/api/where', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-steez-key': h.key },
+        body: JSON.stringify({ url: url || '', title: D().settings.title || '', channel: effectiveChannel() || '' }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 401 ? 'The link code is wrong — paste it again.' : j.error || 'HTTP ' + r.status);
+      Object.assign(hostedState, { status: url ? 'online' : 'offline', at: Date.now(), error: '' });
+    } catch (e) {
+      Object.assign(hostedState, { status: 'error', at: Date.now(), error: e.message || String(e) });
+      log.warn?.('Short viewer link: ' + hostedState.error);
+    }
+    pushHosted();
+  }
+  function onTunnelForHosted(t) {
+    const url = t.state === 'up' ? t.url : '';
+    if (url === hostedUrl) return;
+    hostedUrl = url;
+    clearInterval(hostedBeat);
+    hostedBeat = null;
+    publishHosted(url);
+    if (url) hostedBeat = setInterval(() => publishHosted(hostedUrl), 4 * 60 * 1000);
+  }
+  /** With a short link connected, the tunnel comes on with the server (the link needs it). */
+  function maybeAutoTunnel() {
+    if (hostedOn() && lan.server && tunnel.state().state === 'off') tunnel.start();
+  }
+  function parseLinkCode(code) {
+    const m = /^(https:\/\/[a-z0-9.-]+)\/?#(?:k(?:ey)?=)?([A-Za-z0-9_-]{20,})$/i.exec(String(code || '').trim());
+    if (!m) throw new Error('That isn’t a link code. It looks like https://stz-xxxxx.vercel.app#k=… — paste the whole thing.');
+    return { link: m[1].toLowerCase(), key: m[2] };
+  }
 
   // ---------------------------------------------------------------- TikTok gifts (Steez)
   // Gifts come from the TikTok connection on the TikTok Gifts page. Combo gifts (tapped many
@@ -1329,6 +1415,8 @@ function createSubathon(opts) {
   }
   async function close() {
     for (const i of intervals) clearInterval(i);
+    clearInterval(hostedBeat);
+    if (hostedUrl) await Promise.race([publishHosted(''), new Promise((r) => setTimeout(r, 3000))]);
     tunnel.stop();
     try {
       twitch.disconnect();

@@ -1,0 +1,8 @@
+{
+  "name": "steez-viewer-link",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "2.9.0"
+  }
+}

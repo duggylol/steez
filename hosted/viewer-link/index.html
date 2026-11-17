@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Subathon</title>
+  <meta name="description" content="Live subathon: the countdown, what's been added, and the sounds and videos you can trigger." />
+  <style>
+    :root { --bg: #0b0c12; --surface: #14151e; --line: #20212d; --text: #ecedf4; --text-2: #a4a6b8; --accent: #8f7cff; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: var(--bg); }
+    body.live iframe { display: block; }
+    body.live .wait { display: none; }
+    .wait { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; text-align: center; }
+    .card { max-width: 420px; }
+    .mark { font-weight: 800; font-size: 34px; letter-spacing: -0.03em; }
+    .mark span { color: var(--accent); }
+    h1 { font-size: 20px; margin: 22px 0 6px; font-weight: 650; letter-spacing: -0.01em; }
+    p { color: var(--text-2); margin: 0; }
+    .pulse { display: inline-flex; align-items: center; gap: 10px; margin-top: 22px; padding: 7px 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13px; }
+    .pulse i { width: 8px; height: 8px; border-radius: 99px; background: var(--accent); animation: beat 1.6s ease-in-out infinite; }
+    @keyframes beat { 50% { opacity: .25; transform: scale(.7); } }
+    @media (prefers-reduced-motion: reduce) { .pulse i { animation: none; } }
+  </style>
+</head>
+<body>
+  <div class="wait" role="status" aria-live="polite">
+    <div class="card">
+      <div class="mark">Steez<span>.</span></div>
+      <h1 id="msg">Connecting to the subathon…</h1>
+      <p id="sub">One moment.</p>
+      <div class="pulse"><i></i><span id="state">Checking</span></div>
+    </div>
+  </div>
+  <iframe id="view" title="Subathon" allow="autoplay; fullscreen"></iframe>
+  <script>
+    var current = '';
+    var view = document.getElementById('view');
+    function name(d) {
+      return d.channel ? d.channel + '’s subathon' : d.title && d.title.toLowerCase() !== 'subathon' ? d.title : 'The subathon';
+    }
+    function offline(d) {
+      document.body.classList.remove('live');
+      if (current) { view.removeAttribute('src'); current = ''; }
+      document.getElementById('msg').textContent = name(d || {}) + ' is offline right now';
+      document.getElementById('sub').textContent = 'This page connects by itself as soon as it goes live. No need to refresh.';
+      document.getElementById('state').textContent = 'Waiting for the stream';
+    }
+    function check() {
+      fetch('/api/where', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          document.title = d.channel ? d.channel + ' — subathon' : 'Subathon';
+          if (!d.online || !d.url) return offline(d);
+          if (d.url !== current) { current = d.url; view.src = d.url + '/'; }
+          document.body.classList.add('live');
+        })
+        .catch(function () { if (!current) offline({}); });
+    }
+    check();
+    setInterval(check, 20000);
+  </script>
+</body>
+</html>
