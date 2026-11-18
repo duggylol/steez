@@ -57,6 +57,7 @@ export const PAGE_FEATURE = {
   achievements: 'achievements',
   ai: 'ai',
   modpanel: 'modpanel',
+  chests: 'chests',
 };
 
 /** "X is off" banner at the top of a feature's page. */

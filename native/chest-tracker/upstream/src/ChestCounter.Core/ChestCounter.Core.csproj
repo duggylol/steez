@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Replay parsing is the slow part; keep it optimised in Debug builds as well. -->
+    <Optimize>true</Optimize>
+    <AssemblyName>ChestCounter.ReplayReader.Core</AssemblyName>
+    <RootNamespace>ChestCounter</RootNamespace>
+  </PropertyGroup>
+
+  <!-- The replay parser is vendored (patched FortniteReplayDecompressor), see lib/README.md. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\lib\FortniteReplayReader\FortniteReplayReader.csproj" />
+  </ItemGroup>
+
+</Project>

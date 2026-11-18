@@ -7,6 +7,7 @@ export const PAGES = [
   { id: 'alerts', title: 'Alerts & Events', description: 'Follow, sub, raid and cheer alerts, chat thank-yous, channel point redemptions', keywords: ['follow', 'sub', 'subscriber', 'raid', 'cheer', 'bits', 'notification', 'redemption', 'channel points', 'tts'] },
   { id: 'subathon', title: 'Subathon', description: 'Countdown timer, TV screen, wake-up media menu and goals', keywords: ['countdown', 'timer', 'clock', 'tv', 'goals', 'media', 'sounds', 'wake up'] },
   { id: 'shop', title: 'Shop & Effects', description: 'Viewers spend points on on-stream effects', keywords: ['store', 'redeem', 'confetti', 'emote rain', 'tts', 'shake', 'spotlight', 'effects'] },
+  { id: 'chests', title: 'Fortnite Chests', description: 'Counts the chests you open in Fortnite, live and from replays, with OBS overlays', keywords: ['fortnite', 'chest', 'chests', 'loot', 'treasure', 'replay', 'counter', 'tracker', 'overlay'] },
   { id: 'hype', title: 'Hype & Clips', description: 'Hype meter, hype moments and the !clip command', keywords: ['hype', 'clip', 'clips', 'highlights', 'vod'] },
   { id: 'commands', title: 'Commands', description: 'Custom chat commands and their responses', keywords: ['command', 'cmd', 'chat commands', 'response', 'variables', 'counter'] },
   { id: 'timers', title: 'Timers', description: 'Messages the bot posts on a schedule', keywords: ['timed messages', 'repeat', 'auto message', 'interval', 'announcements'] },
@@ -30,6 +31,9 @@ export const PAGES = [
 
 /** Tabs and named sections inside pages. target.tab = the tab button's label; target.heading = a card title to scroll to. */
 export const SECTIONS = [
+  { title: 'Fortnite chest total', route: 'chests', heading: 'Your chest total', keywords: ['starting number', 'chests opened', 'total', 'count from'] },
+  { title: 'Fortnite chest overlay', route: 'chests', heading: 'OBS overlay', keywords: ['chest overlay', 'obs', 'browser source'] },
+  { title: 'Treasure odds & Treasure Hour', route: 'chests', keywords: ['treasure', 'odds', 'treasure hour', 'gold outfit', 'pirate token'] },
   { title: 'Subathon timer controls', route: 'subathon', tab: 'Dashboard', heading: 'Subathon timer', keywords: ['start timer', 'pause', 'add time', 'set time', 'countdown'] },
   { title: 'Subathon media & prices', route: 'subathon', tab: 'Media & prices', keywords: ['sounds', 'videos', 'upload', 'trigger codes', 'prices', 'soundboard'] },
   { title: 'Subathon goals', route: 'subathon', tab: 'Goals', keywords: ['goal', 'milestones', 'targets'] },

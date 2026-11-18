@@ -112,7 +112,8 @@ export function scoreEntry(query, entry) {
     // Squashed words: "songrequest" vs "Song Requests"
     const flatQ = norm(query).replace(/ /g, '');
     const flatT = norm(entry.title).replace(/ /g, '');
-    if (flatQ.length >= 5 && (flatT.includes(flatQ) || editDistance(flatQ, flatT.slice(0, flatQ.length), 2) <= 2)) return 2.2;
+    // (short queries must be nearly exact, or "tmers" would match the start of "treasure…")
+    if (flatQ.length >= 6 && (flatT.includes(flatQ) || editDistance(flatQ, flatT.slice(0, flatQ.length), 2) <= (flatQ.length >= 9 ? 2 : 1))) return 2.2;
     return 0;
   }
   let score = total / qs.length;

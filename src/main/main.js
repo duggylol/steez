@@ -21,7 +21,7 @@ const DEV = process.env.STEEZ_DEV === '1';
 const API_KEY = crypto.randomBytes(24).toString('hex'); // per-launch secret for the local API
 
 /** Feature modules (CommonJS) living in src/main/<name>/index.cjs */
-const FEATURE_MODULES = ['songseek', 'queueup', 'subathon'];
+const FEATURE_MODULES = ['songseek', 'queueup', 'subathon', 'chests'];
 
 let win = null;
 let splash = null;

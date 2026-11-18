@@ -70,6 +70,18 @@ Moderation (timeouts, deleting messages, shield mode) uses the streamer's own lo
 npm run relay:deploy
 ```
 
+## Fortnite chests
+
+Counts the chests you open in Fortnite (normal Build and Zero Build Battle Royale): live while you
+play, by reading the "+XP CHEST" popup off the screen with Windows OCR (no game hooks), and exactly
+from Fortnite's replays after each match. Shows your stats, treasure odds and squad, with animated
+OBS overlays and `!chests`. Set a starting number to count up a running total.
+
+The counting comes from [Fortnite Chest Tracker](https://github.com/Inceptofn/Fortnite-Chest-Tracker)
+(MIT) and its patched [FortniteReplayDecompressor](https://github.com/Shiqan/FortniteReplayDecompressor)
+(MIT); see `native/chest-tracker/upstream`. It runs as `ChestTracker.exe`, built from
+`native/chest-tracker` with `npm run chests:build` (needs the .NET 10 SDK; the release script builds it).
+
 ## Updates
 
 Steez updates itself the way Discord does. On every launch, the start-up screen asks GitHub for a newer release. If there is one, Steez downloads and installs it before the app opens. While Steez is running it re-checks every 30 minutes and offers **Restart to update**. You can switch off the launch check in *Settings → Updates*.

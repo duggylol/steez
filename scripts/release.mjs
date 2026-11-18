@@ -34,6 +34,7 @@ const tag = `v${version}`;
 const files = [`Steez-Setup-${version}.exe`, `Steez-Setup-${version}.exe.blockmap`, 'latest.yml'].map((f) => path.join('release', f));
 
 console.log('\n▸ Building the installer');
+sh('node scripts/build-chests.mjs');
 sh('npx vite build');
 fs.rmSync(path.join(root, 'release'), { recursive: true, force: true });
 const b = spawnSync('npx', ['electron-builder', '--win', '--publish', 'never'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });

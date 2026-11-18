@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { PageHeader, Button, Empty, copyText } from '../ui.jsx';
 
-const GROUP_TITLE = { Bot: 'Chat bot', songseek: 'Song requests', queueup: 'Viewer queue & TikTok', subathon: 'Subathon' };
-const GROUP_ORDER = ['Bot', 'subathon', 'queueup', 'songseek'];
+const GROUP_TITLE = { Bot: 'Chat bot', songseek: 'Song requests', queueup: 'Viewer queue & TikTok', subathon: 'Subathon', chests: 'Fortnite chests' };
+const GROUP_ORDER = ['Bot', 'subathon', 'chests', 'queueup', 'songseek'];
 
 // Previews run each overlay in its sample mode, so there's always something to see.
 function previewUrl(o, url) {

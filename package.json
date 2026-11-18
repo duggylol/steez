@@ -21,7 +21,8 @@
     "release": "npm run build && electron-builder --win --publish always",
     "relay:setup": "node scripts/relay-wizard.mjs",
     "relay:deploy": "cd relay && npx --yes wrangler@4 deploy",
-    "ship": "node scripts/release.mjs"
+    "ship": "node scripts/release.mjs",
+    "chests:build": "node scripts/build-chests.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

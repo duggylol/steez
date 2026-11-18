@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chest counter</title>
+<!--
+  Steez · Fortnite chest counter overlay (OBS Browser Source, transparent).
+  ?style=card (default) | total | pill | text      ?demo=1  sample numbers on a loop (previews)
+  ?accent=f2b84b  ?title=CHESTS             override the colours/title set in Steez
+-->
+<style>
+  :root { --accent: #f2b84b; --accent-rgb: 242, 184, 75; --ink: #0b0c12; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; font-family: "Segoe UI", system-ui, sans-serif; color: #fff; }
+  body { padding: 10px; }
+  .hidden { display: none !important; }
+
+  /* ── shared panel ── */
+  .panel {
+    position: relative; display: flex; align-items: center; gap: 16px;
+    background: linear-gradient(160deg, rgba(20, 21, 32, 0.92), rgba(11, 12, 18, 0.94));
+    border: 2px solid rgba(var(--accent-rgb), 0.55);
+    border-radius: 18px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    animation: enter 0.7s cubic-bezier(.2, 1.4, .4, 1) both;
+  }
+  @keyframes enter { from { opacity: 0; transform: translateY(16px) scale(.92); } }
+  /* a shine that sweeps across now and then */
+  .panel::after {
+    content: ''; position: absolute; inset: -40% auto -40% -60%; width: 40%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+    transform: skewX(-18deg); animation: shine 7s ease-in-out 1.2s infinite; pointer-events: none;
+  }
+  @keyframes shine { 0%, 70% { left: -60%; } 100% { left: 130%; } }
+  .panel.bump { animation: bump 0.55s cubic-bezier(.2, 1.6, .4, 1); }
+  @keyframes bump { 30% { transform: scale(1.045); box-shadow: 0 10px 40px rgba(var(--accent-rgb), 0.45), 0 0 0 2px rgba(var(--accent-rgb), 0.9); } }
+
+  /* ── the chest ── */
+  .chest { position: relative; flex: none; width: 84px; height: 76px; animation: bob 3.2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-3px); } }
+  .chest svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45)); }
+  .chest .lid { transform-origin: 14px 34px; transition: transform 0.25s cubic-bezier(.3, 1.6, .5, 1); }
+  .chest.open .lid { transform: rotate(-28deg) translateY(-4px); }
+  .chest .glow { opacity: 0; transition: opacity 0.2s; }
+  .chest.open .glow { opacity: 1; }
+
+  /* ── numbers ── */
+  .label { font-size: 13px; font-weight: 800; letter-spacing: 0.16em; color: rgba(var(--accent-rgb), 1); text-transform: uppercase; }
+  .big { font-weight: 900; font-style: italic; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); display: inline-block; }
+  .big.pop { animation: pop 0.5s cubic-bezier(.2, 1.8, .4, 1); }
+  @keyframes pop { 30% { transform: scale(1.28) rotate(-3deg); color: rgba(var(--accent-rgb), 1); } }
+  .sub { color: rgba(255, 255, 255, 0.72); font-size: 13px; font-weight: 600; }
+  .chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 99px; padding: 3px 10px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+  .chip b { color: rgba(var(--accent-rgb), 1); font-weight: 800; margin-right: 4px; }
+  .chip.slide { animation: chipIn 0.5s ease-out both; }
+  @keyframes chipIn { from { opacity: 0; transform: translateY(6px); } }
+
+  /* card */
+  .s-card .panel { width: 380px; padding: 16px 20px 16px 16px; }
+  .s-card .big { font-size: 58px; }
+  .s-card .total-row { margin-top: 6px; font-size: 14px; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+  .s-card .total-row b { color: rgba(var(--accent-rgb), 1); font-size: 18px; font-weight: 900; font-style: italic; }
+
+  /* total */
+  .s-total .panel { width: 440px; padding: 16px 22px 16px 16px; }
+  .s-total .big { font-size: 64px; }
+  .s-total .chest { width: 92px; height: 84px; }
+
+  /* pill */
+  .s-pill .panel { display: inline-flex; padding: 8px 18px 8px 10px; border-radius: 99px; gap: 10px; }
+  .s-pill .chest { width: 48px; height: 44px; }
+  .s-pill .big { font-size: 36px; }
+  .s-pill .sub { font-size: 12.5px; line-height: 1.2; white-space: nowrap; }
+
+  /* text: just "Chests Opened: 1,234" in Fortnite's font (Burbank Big Condensed, if installed) */
+  .s-text { padding: 6px 10px; }
+  .txt { font-family: "Burbank Big Condensed Black", "Burbank Big Condensed", "Burbank Big Cd Bk", Impact, "Arial Narrow Bold", sans-serif;
+    font-weight: 900; font-size: var(--size, 56px); line-height: 1.1; color: var(--text-color, #fff); white-space: nowrap; letter-spacing: 0.01em;
+    -webkit-text-stroke: 0.08em #000; paint-order: stroke fill; text-shadow: 0 0.06em 0 rgba(0, 0, 0, 0.6);
+    animation: txtIn 0.6s cubic-bezier(.2, 1.4, .4, 1) both; }
+  @keyframes txtIn { from { opacity: 0; transform: translateY(10px); } }
+  .txt .num { display: inline-block; font-variant-numeric: tabular-nums; }
+  .txt .num.pop { animation: txtPop 0.45s cubic-bezier(.2, 1.8, .4, 1); }
+  @keyframes txtPop { 35% { transform: scale(1.18); } }
+
+  /* sparks */
+  .spark { position: absolute; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; z-index: 5; }
+</style>
+</head>
+<body>
+<div class="txt hidden" id="txt"><span id="t-label"></span> <span class="num" id="t-num">0</span></div>
+<div class="panel" id="panel">
+  <div class="chest" id="chest">
+    <svg viewBox="0 0 84 76" aria-hidden="true">
+      <defs>
+        <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8763a" /><stop offset="1" stop-color="#7a4a22" /></linearGradient>
+        <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a" /><stop offset="1" style="stop-color: var(--accent)" /></linearGradient>
+        <radialGradient id="shine" cx="0.5" cy="0.6" r="0.6"><stop offset="0" stop-color="#fff6c9" stop-opacity="0.95" /><stop offset="1" style="stop-color: var(--accent); stop-opacity: 0" /></radialGradient>
+      </defs>
+      <ellipse class="glow" cx="42" cy="34" rx="34" ry="20" fill="url(#shine)" />
+      <!-- body -->
+      <rect x="8" y="34" width="68" height="36" rx="5" fill="url(#wood)" stroke="#3a220f" stroke-width="2.5" />
+      <rect x="8" y="34" width="68" height="7" fill="url(#gold)" stroke="#3a220f" stroke-width="2" />
+      <rect x="18" y="34" width="7" height="36" fill="url(#gold)" opacity="0.9" />
+      <rect x="59" y="34" width="7" height="36" fill="url(#gold)" opacity="0.9" />
+      <rect x="35" y="38" width="14" height="16" rx="3" fill="url(#gold)" stroke="#3a220f" stroke-width="2" />
+      <circle cx="42" cy="46" r="2.6" fill="#3a220f" />
+      <!-- lid -->
+      <g class="lid">
+        <path d="M8 34 V22 Q8 8 42 8 Q76 8 76 22 V34 Z" fill="url(#wood)" stroke="#3a220f" stroke-width="2.5" />
+        <path d="M18 34 V14 M25 34 V11 M59 34 V11 M66 34 V14" stroke="url(#gold)" stroke-width="6" />
+        <path d="M8 34 V22 Q8 8 42 8 Q76 8 76 22 V34 Z" fill="none" stroke="#3a220f" stroke-width="2.5" />
+      </g>
+    </svg>
+  </div>
+  <div class="grow" id="body"></div>
+</div>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var style = ['card', 'total', 'pill', 'text'].indexOf(params.get('style')) >= 0 ? params.get('style') : 'card';
+  document.body.className = 's-' + style;
+  var panel = document.getElementById('panel'), chest = document.getElementById('chest'), body = document.getElementById('body');
+  var shown = {}; // number currently on screen per field (for counting up)
+  var last = null;
+
+  function hexToRgb(h) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h || '');
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)].join(', ') : null;
+  }
+  function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // Count a number up (or down) on screen instead of jumping.
+  function tween(el, key, to) {
+    var from = shown[key] == null ? to : shown[key];
+    shown[key] = to;
+    if (from === to) { el.textContent = fmt(to); return; }
+    var t0 = performance.now(), dur = Math.min(900, 250 + Math.abs(to - from) * 60);
+    (function step(t) {
+      var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = fmt(from + (to - from) * e);
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  // A new chest: lid pops, sparks fly, the panel and number bounce.
+  function celebrate(numEl) {
+    chest.classList.add('open');
+    setTimeout(function () { chest.classList.remove('open'); }, 650);
+    panel.classList.remove('bump'); void panel.offsetWidth; panel.classList.add('bump');
+    if (numEl) { numEl.classList.remove('pop'); void numEl.offsetWidth; numEl.classList.add('pop'); }
+    var r = chest.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+    for (var i = 0; i < 16; i++) {
+      var s = document.createElement('div');
+      s.className = 'spark';
+      var c = Math.random() < 0.6 ? 'var(--accent)' : '#fff3c4';
+      s.style.background = c;
+      s.style.boxShadow = '0 0 8px ' + c;
+      s.style.left = (r.left - pr.left + r.width / 2) + 'px';
+      s.style.top = (r.top - pr.top + r.height * 0.4) + 'px';
+      panel.appendChild(s);
+      var a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, d = 40 + Math.random() * 60;
+      s.animate([
+        { transform: 'translate(0,0) rotate(0) scale(1)', opacity: 1 },
+        { transform: 'translate(' + Math.cos(a) * d + 'px,' + (Math.sin(a) * d + 30) + 'px) rotate(' + (Math.random() * 540) + 'deg) scale(.3)', opacity: 0 }
+      ], { duration: 700 + Math.random() * 400, easing: 'cubic-bezier(.2,.8,.3,1)' }).onfinish = (function (el) { return function () { el.remove(); }; })(s);
+    }
+  }
+
+  function chips(d) {
+    var out = [];
+    if (d.show.avg && d.matches) out.push('<span class="chip"><b>AVG</b>' + d.avg.toFixed(1) + '</span>');
+    if (d.show.best && d.matches) out.push('<span class="chip"><b>BEST</b>' + d.best + '</span>');
+    if (d.show.last && d.last != null) out.push('<span class="chip"><b>LAST</b>' + d.last + '</span>');
+    return out.join('');
+  }
+
+  function render(d) {
+    var rgb = hexToRgb(params.get('accent') ? '#' + params.get('accent') : d.accent);
+    if (rgb) { document.documentElement.style.setProperty('--accent', 'rgb(' + rgb + ')'); document.documentElement.style.setProperty('--accent-rgb', rgb); }
+    var title = params.get('title') || d.title || 'CHESTS';
+    if (style === 'text') {
+      var txt = document.getElementById('txt');
+      panel.classList.add('hidden');
+      txt.classList.toggle('hidden', !d.on);
+      if (d.textColor) document.documentElement.style.setProperty('--text-color', d.textColor);
+      if (params.get('size')) document.documentElement.style.setProperty('--size', Number(params.get('size')) + 'px');
+      document.getElementById('t-label').textContent = params.get('label') || d.textLabel || 'Chests Opened:';
+      var value = d.total !== null && d.total !== undefined ? d.total : (d.chests || 0) + (d.live || 0);
+      var numEl = document.getElementById('t-num');
+      var before = shown.text;
+      tween(numEl, 'text', value);
+      if (before != null && value > before) { numEl.classList.remove('pop'); void numEl.offsetWidth; numEl.classList.add('pop'); }
+      return;
+    }
+    panel.classList.toggle('hidden', !d.on);
+    var inMatch = d.live !== null && d.live !== undefined;
+    var prev = last;
+    last = d;
+    var structure = style + '|' + inMatch + '|' + (d.total !== null) + '|' + JSON.stringify(d.show) + '|' + title;
+
+    if (body.dataset.s !== structure) {
+      body.dataset.s = structure;
+      shown = {};
+      if (style === 'card') {
+        body.innerHTML =
+          '<div class="label">' + esc(title) + (inMatch ? ' · this match' : ' · last game') + '</div>' +
+          '<div class="big" id="n-main">0</div>' +
+          (d.total !== null && d.show.total ? '<div class="total-row"><b id="n-total">0</b> total opened</div>' : '') +
+          '<div class="chips" id="chips"></div>';
+      } else if (style === 'total') {
+        body.innerHTML =
+          '<div class="label">' + esc(title) + ' opened</div>' +
+          '<div class="big" id="n-main">0</div>' +
+          '<div class="sub" id="n-sub"></div>';
+      } else {
+        body.innerHTML = '<div class="big" id="n-main">0</div><div class="sub" id="n-sub"></div>';
+      }
+    }
+
+    var main = document.getElementById('n-main');
+    var mainVal;
+    if (style === 'total') mainVal = d.total !== null ? d.total : inMatch ? d.live : d.last != null ? d.last : 0;
+    else mainVal = inMatch ? d.live : (d.last != null ? d.last : 0);
+    tween(main, 'main', mainVal);
+
+    var tot = document.getElementById('n-total');
+    if (tot) tween(tot, 'total', d.total);
+    var sub = document.getElementById('n-sub');
+    if (sub) {
+      if (style === 'total') sub.textContent = d.total === null ? 'Set your starting total in Steez' : inMatch ? '+' + d.live + ' this match' : d.matches ? d.avg.toFixed(1) + ' a match on average' : '';
+      else sub.textContent = title.toLowerCase() + ' · ' + (inMatch ? 'this match' : 'last game');
+    }
+    var ch = document.getElementById('chips');
+    if (ch) {
+      var html = chips(d);
+      if (ch.dataset.h !== html) { ch.dataset.h = html; ch.innerHTML = html; Array.prototype.forEach.call(ch.children, function (c, i) { c.classList.add('slide'); c.style.animationDelay = i * 80 + 'ms'; }); }
+    }
+
+    // a chest was opened
+    if (prev && ((d.live || 0) > (prev.live || 0) || (d.total !== null && prev.total !== null && d.total > prev.total))) celebrate(main);
+  }
+
+  if (params.get('demo')) {
+    var d = { on: true, title: params.get('title') || 'CHESTS', textLabel: params.get('label') || 'Chests Opened:', accent: '#f2b84b', show: { avg: true, best: true, last: true, total: true }, live: 0, total: 1234, chests: 1234, avg: 20.1, best: 51, last: 31, matches: 42 };
+    render(d);
+    setInterval(function () {
+      d = JSON.parse(JSON.stringify(d));
+      if (d.live >= 9) { d.last = d.live; d.live = 0; d.total = 1234; }
+      else { d.live += 1; d.total += 1; }
+      render(d);
+    }, 1800);
+    return;
+  }
+
+  function connect() {
+    var es = new EventSource('/chests/overlay-stream');
+    es.onmessage = function (e) { try { render(JSON.parse(e.data)); } catch (err) {} };
+    es.onerror = function () { es.close(); setTimeout(connect, 2000); };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

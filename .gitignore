@@ -7,5 +7,10 @@ release/
 # Optional build-time config with your Twitch Client ID (CI writes it from a secret).
 app-config.json
 
+# Built from native/chest-tracker by npm run chests:build (and the release script)
+resources/bin/win32-x64/ChestTracker.exe
+native/**/bin/
+native/**/obj/
+
 # Cloudflare wrangler cache
 relay/.wrangler/

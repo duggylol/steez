@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Steez's Fortnite chest tracker helper: runs the live OCR counter and replay scans for
+       Steez, talking JSON lines over stdin/stdout. Published as one self-contained exe into
+       resources/bin/win32-x64 by `npm run chests:build` (and by the release script). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ChestTracker</AssemblyName>
+    <RootNamespace>Steez.ChestTracker</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <ProjectReference Include="..\upstream\src\ChestCounter.Core\ChestCounter.Core.csproj" />
+    <ProjectReference Include="..\upstream\src\ChestCounter.Ocr\ChestCounter.Ocr.csproj" />
+  </ItemGroup>
+</Project>
