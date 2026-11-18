@@ -16,6 +16,7 @@
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+    <Compile Include="..\shared\*.cs" />
     <ProjectReference Include="..\upstream\src\ChestCounter.Core\ChestCounter.Core.csproj" />
     <ProjectReference Include="..\upstream\src\ChestCounter.Ocr\ChestCounter.Ocr.csproj" />
   </ItemGroup>

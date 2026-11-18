@@ -31,7 +31,7 @@ console.log(`\n▸ Bumping version (${bump})`);
 sh(`npm version ${bump} -m "Steez %s"`);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const tag = `v${version}`;
-const files = [`Steez-Setup-${version}.exe`, `Steez-Setup-${version}.exe.blockmap`, 'latest.yml'].map((f) => path.join('release', f));
+const files = [`Steez-Setup-${version}.exe`, `Steez-Setup-${version}.exe.blockmap`, 'latest.yml', 'SteezChestBridge.zip'].map((f) => path.join('release', f));
 
 console.log('\n▸ Building the installer');
 sh('node scripts/build-chests.mjs');
@@ -39,6 +39,8 @@ sh('npx vite build');
 fs.rmSync(path.join(root, 'release'), { recursive: true, force: true });
 const b = spawnSync('npx', ['electron-builder', '--win', '--publish', 'never'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
 if (b.status !== 0) fail(`Build failed. Nothing was published; the version commit and tag ${tag} exist locally only.`);
+// The game PC chest bridge, downloaded from the Fortnite Chests page (releases/latest/download/SteezChestBridge.zip)
+fs.copyFileSync(path.join(root, 'native', 'chest-tracker', 'out', 'SteezChestBridge.zip'), path.join(root, 'release', 'SteezChestBridge.zip'));
 for (const f of files) if (!fs.existsSync(path.join(root, f))) fail(`Build did not produce ${f}`);
 
 console.log('\n▸ Pushing the commit and tag');

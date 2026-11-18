@@ -6,11 +6,25 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const os = require('os');
+const http = require('http');
+const dgram = require('dgram');
+const crypto = require('crypto');
 const express = require('express');
+const { WebSocketServer } = require('ws');
+
+// "Another PC": SteezChestBridge.exe on the game PC finds Steez with a UDP broadcast to this port,
+// then connects to the WebSocket port given in the answer.
+const DISCOVERY_PORT = Number(process.env.STEEZ_CHESTS_DISCOVERY_PORT) || 43120;
+const BRIDGE_PORT = Number(process.env.STEEZ_CHESTS_BRIDGE_PORT) || 43121;
+const BRIDGE_HOST = process.env.STEEZ_CHESTS_BRIDGE_HOST || '0.0.0.0';
+const sha = (x) => crypto.createHash('sha256').update(String(x)).digest('hex');
 
 const GROUP = 'Fortnite chests';
 const DEFAULTS = {
   enabled: false, // off until the streamer turns it on
+  source: 'this', // where Fortnite runs: 'this' PC, or 'game' = another PC running SteezChestBridge.exe
+  bridges: [], // game PCs allowed to connect: { id, name, tokenHash, pairedAt }
   liveCounter: true, // read the XP popup off the screen while playing
   autoScan: true, // read new replays when Steez starts
   screenIndex: -1, // which monitor Fortnite is on (-1 = main)
@@ -42,11 +56,24 @@ function init(ctx) {
   let wantRunning = false;
 
   function sendCmd(obj) {
-    if (child && child.stdin.writable) child.stdin.write(JSON.stringify(obj) + '\n');
+    if (S().source === 'game') {
+      if (bridge.link && bridge.link.readyState === 1) bridge.link.send(JSON.stringify(obj));
+    } else if (child && child.stdin.writable) child.stdin.write(JSON.stringify(obj) + '\n');
   }
+  const connected = () => (S().source === 'game' ? !!bridge.link : !!child);
 
   function start() {
     wantRunning = true;
+    if (S().source === 'game') startBridge();
+    else startLocal();
+  }
+  function stop() {
+    wantRunning = false;
+    stopLocal();
+    stopBridge();
+  }
+
+  function startLocal() {
     if (child) return;
     if (!fs.existsSync(exe)) {
       state.helper = { ...state.helper, status: 'missing', error: 'The chest tracker program is missing from this Steez install. Reinstall Steez, or run `npm run chests:build` in a dev checkout.' };
@@ -91,12 +118,11 @@ function init(ctx) {
       state.helper = { ...state.helper, status: 'error', error: `The chest tracker stopped (code ${code}). Restarting…` };
       push();
       clearTimeout(restartTimer);
-      restartTimer = setTimeout(start, Math.min(60000, 1500 * 2 ** Math.min(restarts, 5)));
+      restartTimer = setTimeout(() => wantRunning && S().source !== 'game' && startLocal(), Math.min(60000, 1500 * 2 ** Math.min(restarts, 5)));
     });
   }
 
-  function stop() {
-    wantRunning = false;
+  function stopLocal() {
     clearTimeout(restartTimer);
     if (child) {
       try {
@@ -119,7 +145,7 @@ function init(ctx) {
     switch (m.type) {
       case 'ready':
         restarts = 0;
-        state.helper = { status: 'running', error: '', ocr: m.ocr, demosExists: m.demosExists, replays: m.replays, demos: m.demos, screens: m.screens || [] };
+        state.helper = { status: 'running', error: '', ocr: m.ocr, demosExists: m.demosExists, replays: m.replays, demos: m.demos, screens: m.screens || [], machine: m.machine || '', remote: S().source === 'game', paused: !!m.extra?.paused };
         sendCmd({ cmd: 'screen', index: S().screenIndex });
         if (S().liveCounter) sendCmd({ cmd: 'live', on: true });
         if (S().autoScan && m.demosExists) sendCmd({ cmd: 'scan' });
@@ -156,6 +182,173 @@ function init(ctx) {
     push();
   }
 
+  // ─── Another PC: the bridge ─────────────────────────────────────
+  const bridge = { udp: null, server: null, port: 0, error: '', link: null, linkInfo: null, pending: new Map() };
+  const lanAddresses = () =>
+    Object.values(os.networkInterfaces())
+      .flat()
+      .filter((a) => a && a.family === 'IPv4' && !a.internal)
+      .map((a) => a.address);
+
+  function bridgeOut() {
+    return {
+      listening: !!bridge.server && !!bridge.port,
+      port: bridge.port,
+      error: bridge.error,
+      addresses: lanAddresses(),
+      name: os.hostname(),
+      connected: bridge.linkInfo,
+      pending: [...bridge.pending.values()].map((p) => ({ id: p.id, name: p.name, ip: p.ip, at: p.at })),
+      paired: (S().bridges || []).map((b) => ({ id: b.id, name: b.name, pairedAt: b.pairedAt })),
+    };
+  }
+
+  function acceptLink(ws, info) {
+    if (bridge.link && bridge.link !== ws) {
+      try {
+        bridge.link.close(4000, 'Another game PC connected');
+      } catch {
+        /* ignore */
+      }
+    }
+    bridge.link = ws;
+    bridge.linkInfo = { id: info.id, name: info.name, ip: info.ip, since: Date.now() };
+    state.helper = { ...state.helper, status: 'starting', error: '' };
+    ws.send(JSON.stringify({ type: 'welcome', name: os.hostname() }));
+    ctx.log.info(`Chest tracker: game PC ${info.name} (${info.ip}) connected`);
+    push();
+  }
+
+  function onBridgeSocket(ws, req) {
+    const ip = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    let info = null;
+    const helloTimer = setTimeout(() => !info && ws.terminate(), 10000);
+    ws.on('message', (raw) => {
+      let m;
+      try {
+        m = JSON.parse(String(raw));
+      } catch {
+        return;
+      }
+      if (!info) {
+        if (m.type !== 'hello' || typeof m.id !== 'string' || !/^[a-z0-9-]{8,64}$/i.test(m.id)) return ws.terminate();
+        clearTimeout(helloTimer);
+        info = { id: m.id, name: String(m.name || 'Game PC').replace(/[^\w .-]/g, '').slice(0, 40) || 'Game PC', ip };
+        const known = (S().bridges || []).find((b) => b.id === info.id);
+        if (known && typeof m.token === 'string' && sha(m.token) === known.tokenHash) return acceptLink(ws, info);
+        // Not allowed yet: the streamer decides on the Fortnite Chests page.
+        if (bridge.pending.size >= 5) {
+          const oldest = [...bridge.pending.values()].sort((a, b) => a.at - b.at)[0];
+          bridge.pending.delete(oldest.id);
+          try {
+            oldest.ws.close();
+          } catch {
+            /* ignore */
+          }
+        }
+        bridge.pending.set(info.id, { ...info, ws, at: Date.now() });
+        ws.send(JSON.stringify({ type: 'pending', name: os.hostname() }));
+        push();
+        return;
+      }
+      if (ws === bridge.link) onEvent(m);
+    });
+    ws.on('close', () => {
+      clearTimeout(helloTimer);
+      if (info && bridge.pending.get(info.id)?.ws === ws) bridge.pending.delete(info.id);
+      if (ws === bridge.link) {
+        bridge.link = null;
+        bridge.linkInfo = null;
+        state.live = null;
+        state.scan = null;
+        state.helper = { ...state.helper, status: 'waiting' };
+        ctx.log.info(`Chest tracker: game PC ${info?.name} disconnected`);
+      }
+      push();
+    });
+    ws.on('error', () => {});
+  }
+
+  function startBridge() {
+    if (bridge.server) return;
+    bridge.error = '';
+    state.helper = { ...state.helper, status: 'waiting', error: '' };
+    const server = http.createServer((req, res) => {
+      res.writeHead(404);
+      res.end();
+    });
+    const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+    server.on('upgrade', (req, socket, head) => {
+      if (!String(req.url || '').startsWith('/chests/bridge')) return socket.destroy();
+      wss.handleUpgrade(req, socket, head, (ws) => onBridgeSocket(ws, req));
+    });
+    let tries = 0;
+    const listen = (port) =>
+      server.listen(port, BRIDGE_HOST, () => {
+        bridge.port = server.address().port;
+        push();
+      });
+    server.on('error', (e) => {
+      if (e.code === 'EADDRINUSE' && tries++ < 5) return listen(BRIDGE_PORT + tries);
+      bridge.error = 'The game PC connection could not start: ' + e.message;
+      push();
+    });
+    listen(BRIDGE_PORT);
+    bridge.server = server;
+
+    // Answer "where is Steez?" from the game PC.
+    const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    udp.on('message', (msg, rinfo) => {
+      try {
+        const m = JSON.parse(String(msg));
+        if (m.steez !== 'chests?' || !bridge.port) return;
+        udp.send(Buffer.from(JSON.stringify({ steez: 'chests', name: os.hostname(), port: bridge.port })), rinfo.port, rinfo.address);
+      } catch {
+        /* not for us */
+      }
+    });
+    udp.on('error', (e) => {
+      bridge.error = 'Steez can’t listen for the game PC (' + e.message + '). The game PC can still connect by address.';
+      push();
+    });
+    udp.bind(DISCOVERY_PORT, BRIDGE_HOST === '0.0.0.0' ? undefined : BRIDGE_HOST);
+    bridge.udp = udp;
+    push();
+  }
+
+  function stopBridge() {
+    for (const p of bridge.pending.values()) {
+      try {
+        p.ws.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    bridge.pending.clear();
+    if (bridge.link) {
+      try {
+        bridge.link.close(1001, 'Steez stopped the chest tracker');
+      } catch {
+        /* ignore */
+      }
+    }
+    bridge.link = null;
+    bridge.linkInfo = null;
+    try {
+      bridge.udp?.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      bridge.server?.close();
+    } catch {
+      /* ignore */
+    }
+    bridge.udp = null;
+    bridge.server = null;
+    bridge.port = 0;
+  }
+
   // ─── Numbers ───────────────────────────────────────────────────
   /** Chests counted since a moment: finished matches after it, plus this match so far. */
   function runningTotal() {
@@ -190,7 +383,8 @@ function init(ctx) {
 
   function fullState() {
     const { matches, ...stats } = state.stats || {};
-    return { settings: S(), helper: state.helper, live: state.live, popup: state.popup, scan: state.scan, lastScan: state.lastScan, stats: state.stats ? stats : null, total: runningTotal(), log: state.log.slice(-15), overlay: overlayData() };
+    const { bridges, ...settings } = S(); // token hashes stay out of the page
+    return { settings, bridge: bridgeOut(), helper: state.helper, live: state.live, popup: state.popup, scan: state.scan, lastScan: state.lastScan, stats: state.stats ? stats : null, total: runningTotal(), log: state.log.slice(-15), overlay: overlayData() };
   }
 
   // ─── Live updates (server-sent events) ─────────────────────────
@@ -231,21 +425,58 @@ function init(ctx) {
   r.get('/chests/api/stream', needKey, stream(streams.full, fullState));
   r.get('/chests/api/state', needKey, (req, res) => res.json(fullState()));
   r.post('/chests/api/scan', needKey, (req, res) => {
-    if (!child) return res.status(409).json({ error: 'Turn the chest tracker on first.' });
+    if (!connected()) return res.status(409).json({ error: S().source === 'game' ? 'The game PC isn’t connected.' : 'Turn the chest tracker on first.' });
     sendCmd({ cmd: 'scan' });
     state.scan = { done: 0, total: state.helper.replays || 0 };
     push();
     res.json({ ok: true });
   });
   r.post('/chests/api/adjust', needKey, express.json(), (req, res) => {
-    if (!child) return res.status(409).json({ error: 'Turn the chest tracker on first.' });
+    if (!connected()) return res.status(409).json({ error: S().source === 'game' ? 'The game PC isn’t connected.' : 'Turn the chest tracker on first.' });
     sendCmd({ cmd: 'adjust', delta: Math.max(-50, Math.min(50, Math.round(Number(req.body?.delta) || 0))) });
     res.json({ ok: true });
   });
   r.post('/chests/api/reset', needKey, (req, res) => {
-    if (!child) return res.status(409).json({ error: 'Turn the chest tracker on first.' });
+    if (!connected()) return res.status(409).json({ error: S().source === 'game' ? 'The game PC isn’t connected.' : 'Turn the chest tracker on first.' });
     sendCmd({ cmd: 'reset' });
     res.json({ ok: true });
+  });
+  r.post('/chests/api/bridge/allow', needKey, express.json(), (req, res) => {
+    const p = bridge.pending.get(String(req.body?.id || ''));
+    if (!p) return res.status(404).json({ error: 'That PC isn’t waiting any more. Start the bridge on it again.' });
+    bridge.pending.delete(p.id);
+    const token = crypto.randomBytes(32).toString('base64url');
+    store.replace({ ...S(), bridges: [...(S().bridges || []).filter((b) => b.id !== p.id), { id: p.id, name: p.name, tokenHash: sha(token), pairedAt: Date.now() }] });
+    p.ws.send(JSON.stringify({ type: 'paired', token, name: os.hostname() }));
+    acceptLink(p.ws, p);
+    res.json(fullState());
+  });
+  r.post('/chests/api/bridge/deny', needKey, express.json(), (req, res) => {
+    const p = bridge.pending.get(String(req.body?.id || ''));
+    if (p) {
+      bridge.pending.delete(p.id);
+      try {
+        p.ws.send(JSON.stringify({ type: 'denied' }));
+        p.ws.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    push();
+    res.json(fullState());
+  });
+  r.post('/chests/api/bridge/forget', needKey, express.json(), (req, res) => {
+    const id = String(req.body?.id || '');
+    store.replace({ ...S(), bridges: (S().bridges || []).filter((b) => b.id !== id) });
+    if (bridge.linkInfo?.id === id) {
+      try {
+        bridge.link.close(4001, 'Forgotten in Steez');
+      } catch {
+        /* ignore */
+      }
+    }
+    push();
+    res.json(fullState());
   });
   r.put('/chests/api/settings', needKey, express.json(), (req, res) => {
     const b = req.body || {};
@@ -255,6 +486,7 @@ function init(ctx) {
     if (typeof b.autoScan === 'boolean') next.autoScan = b.autoScan;
     if (typeof b.chatCommand === 'boolean') next.chatCommand = b.chatCommand;
     if (Number.isInteger(b.screenIndex)) next.screenIndex = b.screenIndex;
+    if (b.source === 'this' || b.source === 'game') next.source = b.source;
     if (b.overlay && typeof b.overlay === 'object') {
       const o = { ...cur.overlay };
       if (typeof b.overlay.title === 'string') o.title = b.overlay.title.slice(0, 24);
@@ -278,7 +510,14 @@ function init(ctx) {
       next.total = t;
     }
     store.replace(next);
-    if (child) {
+    if (next.source !== cur.source && next.enabled) {
+      // Switch between this PC and the game PC.
+      stop();
+      state.live = null;
+      state.stats = null;
+      state.helper = { status: 'off', error: '', ocr: null, demosExists: null, replays: 0, demos: '', screens: [] };
+      start();
+    } else if (connected()) {
       if (next.liveCounter !== cur.liveCounter) sendCmd({ cmd: 'live', on: next.liveCounter });
       if (next.screenIndex !== cur.screenIndex) sendCmd({ cmd: 'screen', index: next.screenIndex });
     }
@@ -331,7 +570,7 @@ function init(ctx) {
   if (S().enabled) start();
 
   // For tests
-  return { state, runningTotal, overlayData, fullState, onEvent, store };
+  return { state, runningTotal, overlayData, fullState, onEvent, store, bridge };
 }
 
 module.exports = { init };

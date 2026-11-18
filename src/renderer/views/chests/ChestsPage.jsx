@@ -82,6 +82,7 @@ export default function ChestsPage() {
         </div>
       )}
 
+      <SourceCard st={st} save={save} />
       <div className="grid3">
         <LiveCard st={st} save={save} />
         <TotalCard st={st} save={save} />
@@ -98,6 +99,111 @@ export default function ChestsPage() {
       <SettingsCard st={st} save={save} />
       <style>{CSS}</style>
     </>
+  );
+}
+
+const BRIDGE_ZIP = 'https://github.com/duggylol/steez/releases/latest/download/SteezChestBridge.zip';
+
+/** Where Fortnite runs: this PC, or a separate game PC running SteezChestBridge.exe. */
+function SourceCard({ st, save }) {
+  const s = st.settings;
+  const B = st.bridge || {};
+  const game = s.source === 'game';
+  const conn = B.connected;
+  return (
+    <Panel
+      title="Where’s Fortnite?"
+      actions={
+        <Seg
+          options={[
+            { id: 'this', label: 'This PC' },
+            { id: 'game', label: 'Another PC' },
+          ]}
+          value={s.source || 'this'}
+          onChange={(v) => save({ source: v })}
+        />
+      }
+    >
+      {!game ? (
+        <div className="faint">
+          Fortnite runs on this PC (or its picture shows on this screen). For a two-PC setup, choose <b>Another PC</b>: a small tray app on your game PC counts chests there, with replays for exact counts, teammates and broken chests, and sends them here.
+        </div>
+      ) : (
+        <>
+          {B.pending?.map((p) => (
+            <div key={p.id} className="banner ch-ask">
+              <div className="grow">
+                <b>{p.name}</b> ({p.ip}) wants to send its chest counts to Steez.
+              </div>
+              <Button variant="primary" onClick={() => act(() => call('POST', '/chests/api/bridge/allow', { id: p.id }), `${p.name} connected`)}>
+                Allow
+              </Button>
+              <Button variant="ghost" onClick={() => act(() => call('POST', '/chests/api/bridge/deny', { id: p.id }))}>
+                Deny
+              </Button>
+            </div>
+          ))}
+          {B.error && <div className="banner bad"><div className="grow">{B.error}</div></div>}
+          {conn ? (
+            <div className="row">
+              <Pill tone="good">Connected</Pill>
+              <span className="grow">
+                <b>{conn.name}</b> <span className="faint">({conn.ip})</span> is counting and sending its chests here.
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => confirm(`Forget ${conn.name}? It will need to be allowed again.`) && act(() => call('POST', '/chests/api/bridge/forget', { id: conn.id }))}>
+                Forget this PC
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="ch-steps">
+                <div>
+                  <b>1. Get the bridge</b>
+                  <div className="faint small">A small app for your game PC. No install, no window: it sits in the tray and starts with Windows.</div>
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <Button size="sm" variant="primary" icon="download" onClick={() => window.steez.open(BRIDGE_ZIP)}>
+                      Download the zip
+                    </Button>
+                    <Button size="sm" icon="copy" onClick={() => copyText(BRIDGE_ZIP, 'Download link copied')}>
+                      Copy link
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <b>2. Run it on your game PC</b>
+                  <div className="faint small">Unzip it anywhere and open SteezChestBridge.exe. It finds this Steez on your network by itself.</div>
+                </div>
+                <div>
+                  <b>3. Allow it here</b>
+                  <div className="faint small">Your game PC shows up above with an Allow button. You only do this once.</div>
+                </div>
+              </div>
+              <div className="faint small" style={{ marginTop: 12 }}>
+                {B.listening ? (
+                  <>
+                    Waiting for the game PC. If it can’t find Steez, right-click its tray icon → <b>Connect to Steez by address</b> and type{' '}
+                    {(B.addresses || []).map((a, i) => (
+                      <span key={a}>
+                        {i ? ' or ' : ''}
+                        <code>{a}</code>
+                      </span>
+                    ))}
+                    . If Windows asks whether Steez may use your network, allow it on private networks.
+                  </>
+                ) : (
+                  'Starting…'
+                )}
+              </div>
+            </>
+          )}
+          {!conn && B.paired?.length > 0 && (
+            <div className="faint small" style={{ marginTop: 8 }}>
+              Allowed before: {B.paired.map((b) => b.name).join(', ')}. It reconnects by itself when it’s running.
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
   );
 }
 
@@ -120,7 +226,13 @@ function LiveCard({ st, save }) {
         <span className="faint small">Fix a missed or doubled chest</span>
       </div>
       <div className="divider" />
-      <Toggle value={s.liveCounter} onChange={(v) => save({ liveCounter: v })} label="Count live while I play" help={`Reads the “+XP CHEST” popup off ${screen ? screen.name : 'your main monitor'}. Screen only, no game hooks, so it’s anticheat-safe. Play in borderless windowed.`} />
+      <Toggle
+        value={s.liveCounter}
+        onChange={(v) => save({ liveCounter: v })}
+        label="Count live while I play"
+        help={`Reads the “+XP CHEST” popup off ${s.source === 'game' ? `${H.machine || 'the game PC'}’s ${screen ? screen.name : 'main monitor'}` : screen ? screen.name : 'your main monitor'}. Screen only, no game hooks, so it’s anticheat-safe. Play in borderless windowed.`}
+      />
+      {s.source === 'game' && H.paused && <div className="faint small">Counting is paused in the bridge’s tray menu on the game PC.</div>}
       {s.liveCounter && st.popup && <div className="faint small">Last popup read: “{st.popup}”</div>}
     </Panel>
   );
@@ -434,4 +546,8 @@ const CSS = `
   .ch-scroll { max-height: 360px; overflow-y: auto; }
   .ch-h { font-weight: 600; margin-bottom: 4px; }
   .ch-line { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .ch-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .ch-steps > div { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  @media (max-width: 1100px) { .ch-steps { grid-template-columns: 1fr; } }
+  .ch-ask::before { background: var(--ok); }
 `;

@@ -11,6 +11,7 @@ app-config.json
 resources/bin/win32-x64/ChestTracker.exe
 native/**/bin/
 native/**/obj/
+native/chest-tracker/out/
 
 # Cloudflare wrangler cache
 relay/.wrangler/

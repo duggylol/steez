@@ -111,18 +111,32 @@ public sealed partial class LiveChestCounter
 
         int credited = 0;      // chests already counted from the popup currently on screen
         int emptyFrames = 0;
+        using var shot = new Bitmap(area.Width, area.Height, PixelFormat.Format32bppArgb);
+        var shotSize = area.Size;
+        Bitmap frame = shot;
         while (!token.IsCancellationRequested)
         {
+            // Steez: stay idle unless Fortnite is running (and, when it records replays, a match is on).
+            if (!ShouldCapture())
+            {
+                credited = 0;
+                emptyFrames = 0;
+                try { await Task.Delay(1000, token); } catch { }
+                continue;
+            }
             if (ScreenIndex != lastIndex) { lastIndex = ScreenIndex; area = PopupArea(ScreenBounds()); }
+            if (area.Size != shotSize) { if (frame != shot) frame.Dispose(); frame = new Bitmap(area.Width, area.Height, PixelFormat.Format32bppArgb); shotSize = area.Size; }
             int n = 0;
             try
             {
-                using var shot = new Bitmap(area.Width, area.Height, PixelFormat.Format32bppArgb);
-                using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(area.X, area.Y, 0, 0, area.Size);
-                n = await ChestsInPopup(shot);
+                using (var g = Graphics.FromImage(frame)) g.CopyFromScreen(area.X, area.Y, 0, 0, area.Size);
+                // Steez: most frames have no popup; skip the OCR unless there's white text to read.
+                if (HasWhiteText(frame)) n = await ChestsInPopup(frame);
+                else SkippedFrames++;
             }
             catch { }
 
+            if (_sawXp) _lastXpAt = DateTime.UtcNow;
             if (n > credited)
             {
                 int cur = _liveRaw < 0 ? 0 : _liveRaw;
@@ -137,13 +151,112 @@ public sealed partial class LiveChestCounter
             emptyFrames = n == 0 ? emptyFrames + 1 : 0;
             if (emptyFrames >= 4) credited = 0;
 
-            try { await Task.Delay(120, token); } catch { }
+            // Steez: the popup stays up ~2 s, so 4 looks a second between popups and 5 while one is up
+            // (to catch a stacked "CHEST X2") still see it many times. The original looked 8 times a second.
+            bool recent = (DateTime.UtcNow - _lastXpAt).TotalSeconds < 4;
+            try { await Task.Delay(recent ? 200 : 240, token); } catch { }
         }
+    }
+    private DateTime _lastXpAt = DateTime.MinValue;
+    private bool _sawXp;
+
+    /// Steez: run the popup detection on an image file (for testing). Returns whether the cheap
+    /// check passed, how many chests were read, and the text.
+    public async Task<(bool worthReading, int chests, string text)> TestImage(string path)
+    {
+        using var img = new Bitmap(path);
+        using var bmp = new Bitmap(img.Width, img.Height, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp)) g.DrawImage(img, 0, 0, img.Width, img.Height);
+        bool worth = HasWhiteText(bmp);
+        _lastPopup = "";
+        int n = worth ? await ChestsInPopup(bmp) : 0;
+        return (worth, n, _lastPopup);
+    }
+
+    // ─── Steez: keep the game PC's performance untouched ───────────────────────────────
+    // Frames read with OCR vs. skipped (for the status / tests).
+    public long SkippedFrames;
+    private DateTime _fnCheckedAt = DateTime.MinValue;
+    private bool _fnRunning;
+    private DateTime _replaysCheckedAt = DateTime.MinValue;
+    private bool _replaysOn;
+
+    /// Steez: game PC mode (SteezChestBridge). Off on the same-PC helper, which may be watching a
+    /// game shown on screen from another PC (an OBS preview), where Fortnite isn't running locally.
+    public bool LowPower { get; set; }
+
+    /// Read the screen only while Fortnite runs; when it records replays, only during a match
+    /// (the match watcher sets the live count to 0 when a match's replay appears).
+    private bool ShouldCapture()
+    {
+        if (!LowPower) return true;
+        var now = DateTime.UtcNow;
+        if ((now - _fnCheckedAt).TotalSeconds >= 5)
+        {
+            _fnCheckedAt = now;
+            try
+            {
+                var ps = System.Diagnostics.Process.GetProcessesByName("FortniteClient-Win64-Shipping");
+                _fnRunning = ps.Length > 0;
+                foreach (var p in ps) p.Dispose();
+            }
+            catch { _fnRunning = true; }
+        }
+        if (!_fnRunning) return false;
+        if ((now - _replaysCheckedAt).TotalMinutes >= 2)
+        {
+            _replaysCheckedAt = now;
+            try
+            {
+                var newest = ChestCounterService.FindReplays().FirstOrDefault();
+                _replaysOn = newest != null && (DateTime.Now - File.GetLastWriteTime(newest)).TotalDays < 14;
+            }
+            catch { _replaysOn = false; }
+        }
+        // Without replays there's no match signal, so read whenever Fortnite is open.
+        return !_replaysOn || _liveRaw >= 0;
+    }
+
+    /// Cheap check before OCR. The XP popup is near-white text with a hard outline, so a frame is only
+    /// worth reading when it has enough sharp near-white-to-dark edges. Bright sky, snow or light UI is
+    /// bright but smooth, and doesn't pass.
+    private static bool HasWhiteText(Bitmap bmp)
+    {
+        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            // ~1 edge per 600 px of the area, sampling every other row (a "+600 XP" popup has thousands)
+            int need = Math.Max(40, bmp.Width * bmp.Height / 1200);
+            int edges = 0;
+            unsafe
+            {
+                for (int y = 0; y < data.Height; y += 2)
+                {
+                    byte* row = (byte*)data.Scan0 + y * data.Stride;
+                    for (int x = 0; x + 3 < data.Width; x++)
+                    {
+                        byte* p = row + x * 4;
+                        if (p[0] < 200 || p[1] < 200 || p[2] < 200) continue;
+                        // a white pixel next to a clearly darker one, either side, within 3 px
+                        byte* q = p + 12;
+                        int white = p[0] + p[1] + p[2];
+                        int next = q[0] + q[1] + q[2];
+                        int prev = x >= 3 ? (p - 12)[0] + (p - 12)[1] + (p - 12)[2] : white;
+                        if (white - next > 330 || white - prev > 330)
+                        {
+                            if (++edges >= need) return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        finally { bmp.UnlockBits(data); }
     }
 
     // A label line that is just "CHEST", optionally with the "X2" Fortnite appends when popups
     // stack. OCR sometimes reads the S as a 5, the X as a K, or glues the two together.
-    [System.Text.RegularExpressions.GeneratedRegex(@"^\W*CHE[S5]T\W*(?:[XxKk\u00d7]\s*(\d{1,2}))?\W*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\W*C[HN]E[S5]T\W*(?:[XxKk\u00d7]\s*(\d{1,2}))?\W*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex ChestLabel();
 
     private string _lastPopup = "";
@@ -154,7 +267,13 @@ public sealed partial class LiveChestCounter
     private async Task<int> ChestsInPopup(Bitmap area)
     {
         var a = await ReadWhiteText(area, scale: 2, minBrightness: 190);
-        var b = await ReadWhiteText(area, scale: 3, minBrightness: 205);
+        // Steez: the second (bigger, slower) pass only when the first one is unsure: it read an XP
+        // popup but no chest label, or a chest label without the XP line. Nothing read (kill feed,
+        // scenery) or both read: one pass is enough.
+        _sawXp = a.Any(l => l.Contains("XP", StringComparison.OrdinalIgnoreCase));
+        bool unsure = _sawXp != (CountChests(a) > 0);
+        var b = unsure ? await ReadWhiteText(area, scale: 3, minBrightness: 205) : new List<string>();
+        _sawXp = _sawXp || b.Any(l => l.Contains("XP", StringComparison.OrdinalIgnoreCase));
 
         var longest = a.Count >= b.Count ? a : b;
         // Only report real XP popups; the area also catches kill-feed names and the like.

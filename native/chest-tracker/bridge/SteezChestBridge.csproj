@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SteezChestBridge.exe: the tray-only chest tracker for a separate game PC. It counts chests there
+       (screen popup + replays) and sends them to Steez on the stream PC over the home network.
+       Published as one self-contained exe and zipped by `npm run chests:build`. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SteezChestBridge</AssemblyName>
+    <RootNamespace>Steez.ChestBridge</RootNamespace>
+    <ApplicationIcon>chest.ico</ApplicationIcon>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Product>Steez Chest Bridge</Product>
+    <Description>Counts Fortnite chests on this PC and sends them to Steez</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <EmbeddedResource Include="chest.ico" LogicalName="chest.ico" />
+    <Compile Include="..\shared\*.cs" />
+    <ProjectReference Include="..\upstream\src\ChestCounter.Core\ChestCounter.Core.csproj" />
+    <ProjectReference Include="..\upstream\src\ChestCounter.Ocr\ChestCounter.Ocr.csproj" />
+  </ItemGroup>
+</Project>
