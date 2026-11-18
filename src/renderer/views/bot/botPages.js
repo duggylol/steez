@@ -90,8 +90,12 @@ export const HELP = {
   'hype.threshold': 'A hype moment = chat speed this many times above its normal baseline.',
   'songs.voteSkipVotes': 'Votes needed for !voteskip.',
   'games.boss.autoSpawnMinutes': '0 = only spawn manually.',
-  'games.trivia.useAI': 'Write a brand-new question with AI every round (needs your Anthropic API key on the AI page): half about the game you’re playing, half random topics. Questions are never repeated. Off = a small built-in set.',
-  'games.trivia.aiTopic': 'Optional: a topic to use for the non-game half instead of random categories.',
+  'games.trivia.difficulty': 'Mix = 40% easy, 35% medium, 25% hard. Or always ask one difficulty.',
+  'games.trivia.pointsEasy': 'Points for answering an easy question first.',
+  'games.trivia.pointsMedium': 'Points for answering a medium question first.',
+  'games.trivia.pointsHard': 'Points for answering a hard question first.',
+  'games.trivia.useAI': 'Trivia asks the built-in vault of 3,000 checked questions first, each one only once. When the vault is used up, the AI writes brand-new questions (needs your Anthropic API key on the AI page): half about the game you’re playing, half random. Off = the vault starts over from the questions asked longest ago.',
+  'games.trivia.aiTopic': 'Optional: once the AI takes over, a topic to use for the non-game half instead of random categories.',
   'games.trivia.duringAdBreaks': 'Start a trivia round automatically when an ad break begins.',
   'overlay.ttsVoice': 'Name of a voice installed on this PC (leave empty for the default).',
   'shoutout.autoList': 'Streamers who get an automatic shoutout the first time they chat each stream (one per line).',
@@ -104,6 +108,12 @@ const TEMPLATES = {
 };
 const SELECTS = {
   'general.replyStyle': ['mention', 'reply'],
+  'games.trivia.difficulty': [
+    { value: 'mix', label: 'Mix (easy, medium and hard)' },
+    { value: 'easy', label: 'Easy only' },
+    { value: 'medium', label: 'Medium only' },
+    { value: 'hard', label: 'Hard only' },
+  ],
   'ai.effort': [
     { value: '', label: 'Model default' },
     { value: 'low', label: 'Low — fastest, cheapest (good for chat)' },
@@ -564,7 +574,7 @@ Did: ${r.actions.join(', ')}` : ''); }, 'primary')), out),
             h('li', {}, h('b', {}, '!catchup [minutes]'), ' — “what did I miss?” summary of chat'),
             h('li', {}, h('b', {}, '!translate'), ' + optional auto-translation of foreign-script messages'),
             h('li', {}, h('b', {}, '${ai prompt}'), ' — use AI inside any custom command (try !roast)'),
-            h('li', {}, h('b', {}, 'AI trivia'), ' — a brand-new question every round, half about your current game (Games → Trivia → Use AI)'),
+            h('li', {}, h('b', {}, 'Trivia'), ' — 3,000 built-in questions that never repeat, easy/medium/hard for different points; then the AI writes new ones (Games → Trivia)'),
             h('li', {}, h('b', {}, 'Stream recap'), ' — written automatically at the end of each stream (Analytics + Discord)'),
             h('li', {}, h('b', {}, 'Spam check'), ' — optional AI review of first-time chatter messages'),
           ))),
@@ -622,13 +632,24 @@ function pageGames(main, on) {
   drawBoss(S.boss);
   on.boss = drawBoss;
   const hp = h('input', { type: 'number', placeholder: 'HP (auto)', style: 'max-width:140px' });
-  const topic = h('input', { placeholder: 'Topic (optional, AI only)' });
+  const topic = h('input', { placeholder: 'Topic (optional)' });
+  const fmtN = (n) => Number(n || 0).toLocaleString();
+  const vaultBox = h('p', { class: 'muted small' }, 'Checking the question vault…');
+  const drawVault = () =>
+    api.action('trivia:vault').then((v) => {
+      if (!v) return;
+      const b = v.byDifficulty;
+      vaultBox.textContent = v.left
+        ? `${fmtN(v.left)} of ${fmtN(v.total)} vault questions left (${fmtN(b.easy)} easy · ${fmtN(b.medium)} medium · ${fmtN(b.hard)} hard). Each is asked once.`
+        : `All ${fmtN(v.total)} vault questions have been asked. New ones come from the AI now.`;
+    }).catch(() => {});
+  drawVault();
   const sw = h('input', { placeholder: 'secret word', value: S.settings.games.secretWord.word });
   const swr = h('input', { type: 'number', value: S.settings.games.secretWord.reward, style: 'max-width:120px' });
   add(main, 
     h('div', { class: 'grid' },
       card('Raid boss', bossBox, h('div', { class: 'row', style: 'margin-top:8px' }, hp, btn('Spawn boss', () => api.action('boss:spawn', { hp: hp.value }), 'primary'))),
-      card('Trivia', h('div', { class: 'row' }, topic, btn('Start round', () => api.action('trivia:start', { topic: topic.value }), 'primary'))),
+      card('Trivia', vaultBox, h('div', { class: 'row' }, topic, btn('Start round', () => api.action('trivia:start', { topic: topic.value }).then(drawVault), 'primary'))),
       card('Secret word', h('p', { class: 'muted small' }, 'First viewer to say this word in chat wins. Nobody sees it but you.'), h('div', { class: 'row' }, sw, swr, btn('Set', () => api.action('secretword:set', { word: sw.value, reward: swr.value }).then(() => toast(sw.value ? 'Secret word armed 🤫' : 'Cleared')), 'primary'))),
     ),
     settingsForm('games', { title: 'Game settings', keys: Object.keys(S.settings.games).filter((k) => k !== 'secretWord') }),

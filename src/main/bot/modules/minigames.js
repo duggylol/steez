@@ -1,42 +1,10 @@
-// Trivia (built-in bank or AI generated) and the secret-word game.
+// Trivia (the built-in vault of ~3,000 questions, then AI generated) and the secret-word game.
 import { db, save, getUser, bumpStat } from '../store.js';
-import { pick, normalizeAnswer, sanitizeChat } from '../util.js';
+import { normalizeAnswer, sanitizeChat } from '../util.js';
 import { log } from '../logger.js';
 import { keep, restore, resumeAt } from '../session.js';
 import { planRound, triviaPrompt, TRIVIA_SYSTEM, isRepeat, parseTrivia } from '../trivia.js';
-
-const BANK = [
-  ['What is the largest planet in our solar system?', ['jupiter']],
-  ['How many legs does a spider have?', ['8', 'eight']],
-  ['What is the chemical symbol for gold?', ['au']],
-  ['Which game features a plumber named Mario? (company)', ['nintendo']],
-  ['What year was Twitch launched?', ['2011']],
-  ['What is the capital of Japan?', ['tokyo']],
-  ['How many sides does a hexagon have?', ['6', 'six']],
-  ['What is the fastest land animal?', ['cheetah']],
-  ['Which planet is known as the Red Planet?', ['mars']],
-  ['What gas do plants absorb from the air?', ['carbon dioxide', 'co2']],
-  ['In Minecraft, what material do you need to make a Nether portal?', ['obsidian']],
-  ['What is the hardest natural substance?', ['diamond']],
-  ['How many players are on a soccer team on the field?', ['11', 'eleven']],
-  ['Which ocean is the largest?', ['pacific', 'pacific ocean']],
-  ['What is the square root of 144?', ['12', 'twelve']],
-  ['What color do you get mixing blue and yellow?', ['green']],
-  ['Which animal is known as the "King of the Jungle"?', ['lion']],
-  ['What is the name of the princess in The Legend of Zelda?', ['zelda']],
-  ['What is the main ingredient in guacamole?', ['avocado']],
-  ['How many continents are there?', ['7', 'seven']],
-  ['What does "GG" stand for in gaming?', ['good game']],
-  ['Which element has the symbol O?', ['oxygen']],
-  ['What is the tallest mountain in the world?', ['everest', 'mount everest']],
-  ['In Pac-Man, what are the ghosts trying to do?', ['catch pacman', 'eat pacman', 'kill pacman', 'catch pac-man']],
-  ['Who painted the Mona Lisa?', ['da vinci', 'leonardo da vinci', 'leonardo']],
-  ['What is frozen water called?', ['ice']],
-  ['How many minutes are in a full day?', ['1440']],
-  ['Which country is home to the kangaroo?', ['australia']],
-  ['What is the currency of the United Kingdom?', ['pound', 'pound sterling', 'gbp']],
-  ['What is the largest mammal?', ['blue whale']],
-];
+import { loadVault, pickFromVault, pickDifficulty } from '../triviaVault.js';
 
 export function init(bot) {
   const T = () => db.settings.games.trivia;
@@ -52,17 +20,42 @@ export function init(bot) {
     db.meta.triviaAiV1 = Date.now();
     save();
   }
+  // Points by difficulty. The old single "reward" setting is replaced by these.
+  if (!db.meta.triviaVaultV1) {
+    delete T().reward;
+    db.meta.triviaVaultV1 = Date.now();
+    save();
+  }
+  const POINTS_KEY = { easy: 'pointsEasy', medium: 'pointsMedium', hard: 'pointsHard' };
+  const pointsFor = (d) => Math.max(0, Number(T()[POINTS_KEY[d] || 'pointsMedium']) || 0);
+
+  // Vault questions already asked in this channel, oldest first (ids, so updates to the vault keep it).
+  db.meta.triviaVaultUsed ||= [];
+  const usedIds = () => new Set(db.meta.triviaVaultUsed);
+  const markUsed = (id) => {
+    const list = db.meta.triviaVaultUsed;
+    const i = list.indexOf(id);
+    if (i >= 0) list.splice(i, 1);
+    list.push(id);
+  };
+  const vaultStatus = () => {
+    const vault = loadVault();
+    const used = usedIds();
+    const left = { easy: 0, medium: 0, hard: 0 };
+    for (const x of vault) if (!used.has(x.id)) left[x.d]++;
+    return { total: vault.length, left: left.easy + left.medium + left.hard, byDifficulty: left };
+  };
+
   const remember = (q, a, kind, topic) => {
     db.triviaHistory.push({ q, a, kind, topic, t: Date.now() });
     if (db.triviaHistory.length > 1000) db.triviaHistory.splice(0, db.triviaHistory.length - 1000);
     save();
   };
 
-  async function aiQuestion(topic) {
+  async function aiQuestion(topic, difficulty) {
     const plan = planRound({ topic, game: bot.state.stream?.game, randomTopic: T().aiTopic, state: db.meta.trivia || {} });
     const recent = db.triviaHistory.slice(-80).map((h) => h.q);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const difficulty = pick(['easy', 'medium', 'medium', 'tricky']);
       const out = await bot.ai.complete(TRIVIA_SYSTEM, triviaPrompt(plan, recent, difficulty), { maxTokens: 1500 });
       const r = parseTrivia(out);
       if (!r) continue;
@@ -71,41 +64,67 @@ export function init(bot) {
         continue;
       }
       db.meta.trivia = plan.state;
-      return { question: sanitizeChat(r.question, 300), answers: r.answers, kind: plan.kind, topic: plan.topic };
+      return { question: sanitizeChat(r.question, 300), answers: r.answers, kind: plan.kind, topic: plan.topic, difficulty };
     }
     return null;
   }
 
-  /** Built-in questions, each used once before any comes back (only when the AI can't be used). */
-  function bankQuestion() {
-    const asked = new Set(db.triviaHistory.map((h) => h.q));
-    let fresh = BANK.filter(([q]) => !asked.has(q));
-    if (!fresh.length) {
-      // Every built-in question has been asked: start the bank over, oldest first.
-      const order = new Map(db.triviaHistory.map((h, i) => [h.q, i]));
-      fresh = [...BANK].sort((x, y) => (order.get(x[0]) ?? -1) - (order.get(y[0]) ?? -1)).slice(0, Math.ceil(BANK.length / 2));
-    }
-    const [question, answers] = pick(fresh);
-    return { question, answers, kind: 'bank', topic: '' };
+  /** The next unused vault question (null when the vault is used up, or nothing matches the topic). */
+  function vaultQuestion(topic, difficulty) {
+    const recentCategories = db.triviaHistory.slice(-6).map((h) => h.topic).filter(Boolean);
+    const item = pickFromVault({
+      vault: loadVault(),
+      used: usedIds(),
+      difficulty,
+      topic,
+      recentCategories,
+      // Already asked here some other way (an AI round before the vault existed): count it as used.
+      skip: (x) => isRepeat(x.q, x.a[0], db.triviaHistory) && (markUsed(x.id), true),
+    });
+    if (!item) return null;
+    markUsed(item.id);
+    return { question: item.q, answers: item.a, kind: 'vault', topic: item.c, difficulty: item.d };
+  }
+
+  /** Vault used up and no AI: the questions asked longest ago come back first. */
+  function recycledQuestion(difficulty) {
+    const vault = new Map(loadVault().map((x) => [x.id, x]));
+    const used = db.meta.triviaVaultUsed;
+    const oldest = used.slice(0, Math.max(1, Math.ceil(used.length / 4))).map((id) => vault.get(id)).filter(Boolean);
+    if (!oldest.length) return null;
+    const item = oldest.find((x) => x.d === difficulty) || oldest[0];
+    markUsed(item.id);
+    return { question: item.q, answers: item.a, kind: 'vault', topic: item.c, difficulty: item.d };
   }
 
   async function start(topic) {
     if (round || starting) return false;
     starting = true;
     try {
-      let r = null;
-      if (T().useAI !== false && bot.ai?.available()) {
+      const difficulty = pickDifficulty(T().difficulty);
+      const aiOn = T().useAI !== false && bot.ai?.available();
+      const ai = async () => {
         try {
-          r = await aiQuestion(topic);
+          return await aiQuestion(topic, difficulty);
         } catch (e) {
-          log.warn('AI trivia failed, using a built-in question:', e.message);
+          log.warn('AI trivia failed:', e.message);
+          return null;
         }
-      }
-      if (!r) r = bankQuestion();
+      };
+      // The vault first. The AI only writes questions once the vault is used up (or for a
+      // !trivia <topic> the vault has nothing left on).
+      let r = vaultQuestion(topic, difficulty);
+      if (!r && aiOn) r = await ai();
+      if (!r && topic) r = vaultQuestion('', difficulty);
+      if (!r) r = recycledQuestion(difficulty);
+      if (!r) return false;
+      save();
       if (round) return false;
+      const points = pointsFor(r.difficulty);
       remember(r.question, r.answers[0], r.kind, r.topic);
-      begin({ q: r.question, answers: r.answers.map(normalizeAnswer), display: r.answers[0], ends: Date.now() + T().answerSeconds * 1000 });
-      bot.say(`🧠 TRIVIA${r.kind === 'game' ? ` (${r.topic})` : ''} (${T().answerSeconds}s, +${bot.fmtPoints(T().reward)}): ${r.question}`);
+      begin({ q: r.question, answers: r.answers.map(normalizeAnswer), display: r.answers[0], difficulty: r.difficulty, points, ends: Date.now() + T().answerSeconds * 1000 });
+      const level = { easy: '🟢 EASY', medium: '🟡 MEDIUM', hard: '🔴 HARD' }[r.difficulty] || '';
+      bot.say(`🧠 TRIVIA${r.kind === 'game' ? ` (${r.topic})` : ''} · ${level} · +${bot.fmtPoints(points)} · ${T().answerSeconds}s: ${r.question}`);
       return true;
     } finally {
       starting = false;
@@ -114,7 +133,7 @@ export function init(bot) {
 
   function begin(r) {
     round = r;
-    keep('trivia', { q: r.q, answers: r.answers, display: r.display, ends: r.ends });
+    keep('trivia', { q: r.q, answers: r.answers, display: r.display, difficulty: r.difficulty, points: r.points, ends: r.ends });
     round.timer = setTimeout(() => {
       bot.say(`⌛ Time's up! The answer was: ${round.display}`);
       end();
@@ -130,16 +149,17 @@ export function init(bot) {
     const saved = restore('trivia');
     if (saved?.q) begin({ ...saved, ends: resumeAt(saved.ends) });
   }
-  bot.trivia = { start };
+  bot.trivia = { start, vaultStatus };
 
   bot.on('chat', (ctx) => {
     if (round && round.answers.includes(normalizeAnswer(ctx.text))) {
       const ans = round.display;
+      const points = round.points ?? pointsFor(round.difficulty);
       end();
-      bot.addPoints(ctx.user.login, T().reward, ctx.user.display);
+      bot.addPoints(ctx.user.login, points, ctx.user.display);
       const wins = bumpStat(getUser(ctx.user.login), 'triviaWins');
       if (wins >= 10) bot.emit('achievement:unlock', ctx.user.login, 'trivia_whiz');
-      bot.say(`✅ ${ctx.user.display} got it! The answer was "${ans}" (+${bot.fmtPoints(T().reward)}) — ${wins} trivia win${wins > 1 ? 's' : ''} total.`);
+      bot.say(`✅ ${ctx.user.display} got it! The answer was "${ans}" (+${bot.fmtPoints(points)}) — ${wins} trivia win${wins > 1 ? 's' : ''} total.`);
     }
 
     // Secret word
@@ -166,6 +186,7 @@ export function init(bot) {
   });
 
   bot.action('trivia:start', ({ topic }) => start(topic));
+  bot.action('trivia:vault', () => vaultStatus());
   bot.action('secretword:set', ({ word, reward }) => {
     db.settings.games.secretWord = { word: String(word || '').trim(), reward: Number(reward) || db.settings.games.secretWord.reward };
     save();

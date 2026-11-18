@@ -17,6 +17,7 @@ const { render } = await import('../src/main/bot/core/variables.js');
 const { parseLine } = await import('../src/main/bot/twitch/irc.js');
 const { parseAmount, sanitizeChat } = await import('../src/main/bot/util.js');
 const { convertVariables } = await import('../src/main/bot/web/api.js');
+const { loadVault } = await import('../src/main/bot/triviaVault.js');
 
 const said = [];
 bot.on('bot:said', (t) => said.push(t));
@@ -235,9 +236,11 @@ test('features: everything switches off, and feature commands still work without
   delete db.commands.ping;
 });
 
-test('trivia: a new AI question every round, half about the game, never a repeat', async () => {
+test('trivia: once the vault is used up, a new AI question every round, half about the game, never a repeat', async () => {
   db.settings.games.trivia.enabled = true;
   db.settings.games.trivia.useAI = true;
+  const keepUsed = db.meta.triviaVaultUsed;
+  db.meta.triviaVaultUsed = loadVault().map((x) => x.id);
   const realAi = bot.ai;
   const realStream = bot.state.stream;
   const prompts = [];
@@ -262,22 +265,47 @@ test('trivia: a new AI question every round, half about the game, never a repeat
   } finally {
     bot.ai = realAi;
     bot.state.stream = realStream;
+    db.meta.triviaVaultUsed = keepUsed;
   }
 });
 
-test('trivia without AI: built-in questions are never repeated until all were used', async () => {
+test('trivia: vault questions come first, never repeat, and pay by difficulty', async () => {
   const realAi = bot.ai;
-  bot.ai = { ...realAi, available: () => false };
+  let aiCalls = 0;
+  bot.ai = { ...realAi, available: () => true, complete: async () => (aiCalls++, '{}') };
+  db.settings.games.trivia.difficulty = 'mix';
   const asked = [];
+  const seen = { easy: 0, medium: 0, hard: 0 };
   try {
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 60; i++) {
       await bot.runAction('trivia:start', {});
       const last = db.triviaHistory.at(-1);
+      assert.equal(last.kind, 'vault');
       asked.push(last.q);
+      const item = loadVault().find((x) => x.q === last.q);
+      seen[item.d]++;
+      const before = bot.points('quizzer');
       await chat('quizzer', last.a);
+      const pts = { easy: 250, medium: 500, hard: 1000 }[item.d];
+      assert.equal(bot.points('quizzer') - before, pts, `${item.d} pays ${pts}`);
     }
   } finally {
     bot.ai = realAi;
   }
-  assert.equal(new Set(asked).size, 30);
+  assert.equal(new Set(asked).size, 60, 'no question twice');
+  assert.equal(aiCalls, 0, 'the AI is not used while the vault has questions');
+  assert.ok(seen.easy && seen.medium && seen.hard, 'all three difficulties come up');
+  const status = await bot.runAction('trivia:vault');
+  assert.equal(status.left, status.total - db.meta.triviaVaultUsed.length);
+});
+
+test('trivia: one difficulty only, and the announcement says which', async () => {
+  db.settings.games.trivia.difficulty = 'hard';
+  said.length = 0;
+  await bot.runAction('trivia:start', {});
+  assert.match(said.join(' '), /HARD/);
+  const last = db.triviaHistory.at(-1);
+  assert.equal(loadVault().find((x) => x.q === last.q).d, 'hard');
+  await chat('quizzer', last.a);
+  db.settings.games.trivia.difficulty = 'mix';
 });

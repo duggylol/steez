@@ -54,6 +54,6 @@ export const SECTIONS = [
   { title: 'Updates', route: 'settings', tab: 'General', heading: 'Updates', keywords: ['check for updates', 'version', 'upgrade'] },
   { title: 'Channel point redemptions', route: 'alerts', heading: 'Channel point redemptions', keywords: ['channel points', 'reward', 'redeem'] },
   { title: 'Raid boss', route: 'games', heading: 'Raid boss', keywords: ['boss', 'attack', 'spawn'] },
-  { title: 'Trivia', route: 'games', heading: 'Trivia', keywords: ['quiz', 'questions', 'trivia round'] },
+  { title: 'Trivia', route: 'games', heading: 'Trivia', keywords: ['quiz', 'questions', 'trivia round', 'question vault', 'difficulty', 'easy', 'medium', 'hard', 'trivia points'] },
   { title: 'Secret word', route: 'games', heading: 'Secret word', keywords: ['hidden word'] },
 ];

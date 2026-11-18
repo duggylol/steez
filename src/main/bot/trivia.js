@@ -69,26 +69,45 @@ export function triviaPrompt(plan, recentQuestions = [], difficulty = 'medium') 
   return `Write one ${difficulty} trivia question about ${about}${avoid}`;
 }
 
-const words = (s) =>
-  String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]+/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 2);
+// Words that say nothing about which fact a question asks ("What does GTA stand for?" and "What does
+// RPG stand for?" are different questions; only "gta" and "rpg" tell them apart).
+const STOP = new Set(
+  ('what which who whom whose when where why how does did was were are the and for from with that this these those has have had ' +
+    'its his her their our your you can could would should will into onto than then them they there name named called call ' +
+    'stand stands known famous many much also often usually typically traditionally commonly ' +
+    'is in of a an to by on at as or be it s t')
+    .split(/\s+/),
+);
+export const contentWords = (s) => [
+  ...new Set(
+    String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w && !STOP.has(w)),
+  ),
+];
+const sameAnswer = (a, b) => {
+  const n = (s) => String(s || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]/g, '');
+  return !!n(a) && n(a) === n(b);
+};
 
-/** Is this question (or its answer) one that was already asked? history: [{ q, a }] */
+/**
+ * Is this question one that was already asked? history: [{ q, a }]
+ * A repeat is the same fact (same answer, mostly the same words) or the same question barely reworded.
+ * "How many points is a touchdown worth?" and "...a field goal worth?" are different questions.
+ */
 export function isRepeat(question, answer, history = []) {
-  const qw = words(question);
-  const qs = qw.join(' ');
-  const ans = String(answer || '').trim().toLowerCase();
+  const qw = contentWords(question);
   for (const h of history) {
-    const hw = words(h.q);
-    if (hw.join(' ') === qs) return true;
+    const hw = contentWords(h.q);
     const set = new Set(hw);
     const shared = qw.filter((w) => set.has(w)).length;
+    if (shared === qw.length && shared === hw.length) return true; // the same words
     const overlap = shared / Math.max(1, Math.min(qw.length, hw.length));
-    if (overlap >= 0.8) return true; // the same question reworded
-    if (ans && String(h.a || '').trim().toLowerCase() === ans && overlap >= 0.4) return true; // same fact, asked differently
+    const jaccard = shared / Math.max(1, new Set([...qw, ...hw]).size);
+    if (sameAnswer(answer, h.a) && overlap >= 0.6) return true; // the same fact, asked differently
+    if (jaccard >= 0.85) return true; // the same question with a word or two changed
   }
   return false;
 }
