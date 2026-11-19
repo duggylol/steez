@@ -143,3 +143,22 @@ test('chat memory off: nothing is saved and there is no history tool', async () 
     db.settings.ai.chatMemory = true;
   }
 });
+
+test('the AI only uses light models: Sonnet or Haiku, never Opus or Fable', async () => {
+  assert.ok(requests.every((r) => ['claude-sonnet-5-5', 'claude-haiku-5-5'].includes(r.model)));
+  assert.equal(requests[0].model, 'claude-haiku-5-5', 'the chosen light model is used');
+  db.settings.ai.model = 'claude-opus-5-5'; // e.g. a setting saved by an older version
+  db.settings.ai.effort = 'max';
+  try {
+    script = [{ content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }];
+    const before = requests.length;
+    await ask('ModPerson3', 'moderator', '!ask play something chill');
+    assert.equal(requests[before].model, 'claude-sonnet-5-5');
+    assert.equal(requests[before].output_config.effort, 'low');
+    assert.ok(requests[before].tools.some((t) => t.name === 'queue_song'), 'still has every command');
+    assert.equal((await bot.runAction('ai:status')).model, 'claude-sonnet-5-5');
+  } finally {
+    db.settings.ai.model = 'claude-haiku-5-5';
+    db.settings.ai.effort = 'low';
+  }
+});

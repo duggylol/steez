@@ -2,7 +2,7 @@
 // auto-translation, first-message spam check and end-of-stream recaps.
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { db, findUser } from '../store.js';
+import { db, save, findUser } from '../store.js';
 import { config } from '../config.js';
 import { log } from '../logger.js';
 import { defineVariable } from '../core/variables.js';
@@ -10,11 +10,22 @@ import { sanitizeChat } from '../util.js';
 import { createAiTools } from './aiTools.js';
 import { createChatHistory, formatLines } from '../chatHistory.js';
 
-// Models that accept server-side refusal fallbacks ("default" mode)
-const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
+// Chat only needs a light model: Sonnet (default, best at using tools) or Haiku (cheapest).
+export const AI_MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5'];
+export const AI_EFFORTS = ['', 'low', 'medium', 'high'];
+// Models that accept server-side refusal fallbacks ("default" mode); Haiku has none.
+const FALLBACK_MODELS = new Set(['claude-sonnet-5-5']);
 
 export function init(bot) {
   const A = () => db.settings.ai;
+  const model = () => (AI_MODELS.includes(A().model) ? A().model : AI_MODELS[0]);
+  const effort = () => (AI_EFFORTS.includes(A().effort) ? A().effort : 'low');
+  // Settings saved by older versions may still name Opus / Fable or a heavy effort: move them over.
+  if (A().model !== model() || A().effort !== effort()) {
+    A().model = model();
+    A().effort = effort();
+    save();
+  }
   const { toolsFor } = createAiTools(bot);
   let client = null;
   let clientKey = '';
@@ -132,8 +143,8 @@ export function init(bot) {
     const wait = lastCall + 1500 - Date.now();
     lastCall = Math.max(Date.now(), lastCall + 1500);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    params = { model: A().model, ...(A().effort ? { output_config: { effort: A().effort } } : {}), ...params };
-    if (!FALLBACK_MODELS.has(A().model)) return getClient().messages.create(params);
+    params = { model: model(), ...(effort() ? { output_config: { effort: effort() } } : {}), ...params };
+    if (!FALLBACK_MODELS.has(params.model)) return getClient().messages.create(params);
     try {
       return await getClient().beta.messages.create({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
     } catch (e) {
@@ -362,6 +373,6 @@ The streamer says: ${prompt || 'Hello! Who are you?'}`,
     );
     return { reply: clean(text), actions };
   });
-  bot.action('ai:status', () => ({ configured: !!config.anthropicKey, enabled: A().enabled, model: A().model }));
+  bot.action('ai:status', () => ({ configured: !!config.anthropicKey, enabled: A().enabled, model: model() }));
   bot.action('ai:memory', () => ({ on: memoryOn(), ...history.info() }));
 }
