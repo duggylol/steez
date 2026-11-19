@@ -1,5 +1,7 @@
 // Default settings. Anything added here is merged into existing databases on startup,
 // so new options appear automatically after an update. The dashboard renders these as forms.
+import { DEFAULT_FISH_TIERS } from './fishing.js';
+
 export const defaultSettings = {
   general: {
     prefix: '!',
@@ -63,7 +65,8 @@ export const defaultSettings = {
       ],
     },
     roulette: { enabled: true, chambers: 6, timeoutSeconds: 60 },
-    fishing: { enabled: true, cooldownSeconds: 90 },
+    fishing: { enabled: true, cooldownSeconds: 90, tiers: DEFAULT_FISH_TIERS },
+    jackpot: { enabled: true, joinSeconds: 15, minBet: 10, maxBet: 0, minPlayers: 2, spinSeconds: 8, hideAfterSeconds: 30, cooldownSeconds: 0 },
     checkin: { enabled: true, baseReward: 50, streakBonus: 10, maxStreakBonus: 300 },
     boss: {
       enabled: true,

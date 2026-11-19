@@ -99,7 +99,7 @@ export function registerBotFeatures(features, { db, save, bot }) {
   features.register({
     id: 'games',
     name: 'Chat games',
-    description: 'Gamble, duel, heist, roulette, fishing, check-ins, trivia and more.',
+    description: 'Gamble, duel, heist, jackpot, roulette, fishing, check-ins, trivia and more.',
     page: 'games',
     group: 'Chat bot',
     needs: 'chatbot',

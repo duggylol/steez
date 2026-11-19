@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Jackpot</title>
+  <!--
+    The !jackpot reel for OBS (browser source, 1280 × 400, transparent).
+    Every player gets spots on a horizontal reel: the more points they put in, the more spots.
+    When the countdown ends the reel rolls past the center marker and stops on one of the winner's
+    spots. It slides up when a round starts and back down once nothing has happened for a while.
+    ?demo=1 plays sample rounds on a loop (silent). ?sound=0 mutes the ticks.
+  -->
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; color: #f4f4f6; }
+    #fx { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+    #card {
+      position: absolute; left: 20px; right: 20px; bottom: 20px;
+      background: linear-gradient(180deg, rgba(28, 27, 36, .96), rgba(16, 16, 22, .97));
+      border: 1px solid rgba(255, 255, 255, .09); border-radius: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06);
+      padding: 16px 22px 16px;
+      /* hidden: below the bottom edge */
+      transform: translateY(calc(100% + 60px)); opacity: 0;
+      transition: transform .7s cubic-bezier(.65, 0, .85, .25), opacity .45s ease .25s;
+    }
+    #card.show { transform: translateY(0); opacity: 1; transition: transform .85s cubic-bezier(.16, 1, .3, 1), opacity .35s ease; }
+    .top { display: flex; align-items: center; gap: 16px; }
+    .tag { font-size: 15px; font-weight: 800; letter-spacing: .18em; color: #ffd36b; text-transform: uppercase; }
+    .pot { display: flex; align-items: baseline; gap: 8px; }
+    .pot b { font-size: 34px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; background: linear-gradient(180deg, #fff3c9, #ffc94a 60%, #e59a1c); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 10px rgba(255, 190, 60, .25)); }
+    .pot span { font-size: 16px; color: #a9a8b8; font-weight: 600; }
+    .grow { flex: 1; }
+    .pill { font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .1); color: #e8e8ee; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pill.hot { background: rgba(255, 92, 138, .16); border-color: rgba(255, 92, 138, .45); color: #ffd0dd; }
+    .pill.win { background: rgba(255, 211, 107, .16); border-color: rgba(255, 211, 107, .5); color: #ffe7ad; }
+    .reel { position: relative; height: 150px; margin-top: 12px; border-radius: 18px; background: rgba(0, 0, 0, .32); border: 1px solid rgba(255, 255, 255, .06); overflow: hidden; }
+    .reel canvas { position: absolute; inset: 0; width: 100%; height: 100%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+    .marker { position: absolute; top: 0; bottom: 0; left: 50%; width: 4px; margin-left: -2px; background: linear-gradient(180deg, #fff3c9, #ffc94a); box-shadow: 0 0 14px rgba(255, 200, 80, .8); border-radius: 2px; z-index: 2; }
+    .marker::before, .marker::after { content: ''; position: absolute; left: 50%; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; transform: translateX(-50%); }
+    .marker::before { top: -2px; border-top: 16px solid #ffd36b; }
+    .marker::after { bottom: -2px; border-bottom: 16px solid #ffd36b; }
+    .legend { display: flex; gap: 8px; margin-top: 12px; overflow: hidden; height: 32px; }
+    .chip { display: flex; align-items: center; gap: 8px; flex: none; padding: 5px 12px 5px 8px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .chip i { width: 14px; height: 14px; border-radius: 5px; flex: none; }
+    .chip em { font-style: normal; color: #a9a8b8; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .chip.win { background: rgba(255, 211, 107, .16); border-color: rgba(255, 211, 107, .5); }
+    .chip.out { opacity: .35; }
+    .foot { margin-top: 10px; text-align: center; font-size: 18px; font-weight: 600; color: #d6d5e0; min-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .foot b { color: #fff; }
+    .foot .cmd { color: #ffd36b; font-weight: 800; }
+    .foot.win { font-size: 22px; animation: winpop .6s cubic-bezier(.2, 1.6, .4, 1); }
+    @keyframes winpop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  </style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div id="card">
+    <div class="top">
+      <div class="tag">🎰 Jackpot</div>
+      <div class="pot"><b id="pot">0</b><span id="cur">points</span></div>
+      <div class="grow"></div>
+      <div class="pill" id="pill">Starting…</div>
+    </div>
+    <div class="reel" id="reelBox"><div class="marker"></div><canvas id="reel"></canvas></div>
+    <div class="legend" id="legend"></div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const DEMO = !!params.get('demo');
+    const SOUND = params.get('sound') !== '0' && !DEMO;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const fmt = (n) => Math.round(n).toLocaleString();
+    const COLORS = ['#7c5cff', '#ff5c8a', '#ffb547', '#2fd39a', '#38bdf8', '#f472b6', '#a3e635', '#fb7185', '#22d3ee', '#c084fc', '#facc15', '#4ade80', '#f97316', '#60a5fa'];
+    const SPOTS = 30;  // about how many spots one round of the reel has (everyone gets at least 1)
+    const TW = 128;    // one spot, including the gap
+
+    // ── State ──
+    let st = null;          // the round from Steez
+    let skew = 0;           // Steez clock minus ours
+    let shown = false;
+    let hideTimer = null;
+    let pos = 0;            // reel position under the marker, in spots
+    let spin = null;        // { id, from, to, start, ms }
+    let pattern = [];       // player index for each spot of one round of the reel
+    let patternKey = '';
+    let spotsOf = [];       // spots per player
+    let lastSpot = null;
+    let celebrated = null;
+    const now = () => Date.now() + skew;
+
+    function show() {
+      clearTimeout(hideTimer);
+      if (!shown) { shown = true; $('card').classList.add('show'); }
+    }
+    function hide() {
+      clearTimeout(hideTimer);
+      shown = false;
+      $('card').classList.remove('show');
+    }
+
+    // Seeded shuffle, so every copy of this overlay builds the same reel for a round.
+    function rng(seed) {
+      let a = seed >>> 0;
+      return () => {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    /** More points = more spots. Spots are shuffled so each player's are spread along the reel. */
+    function buildPattern(s) {
+      const key = `${s.id}:${s.players.map((p) => p.amount).join(',')}`;
+      if (key === patternKey) return;
+      patternKey = key;
+      const pot = s.players.reduce((a, p) => a + p.amount, 0) || 1;
+      spotsOf = s.players.map((p) => Math.max(1, Math.round((p.amount / pot) * SPOTS)));
+      const list = spotsOf.flatMap((n, i) => Array(n).fill(i));
+      const r = rng(Number(s.id) % 2147483647);
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      // avoid the same player twice in a row where we can
+      for (let i = 1; i < list.length; i++) {
+        if (list[i] !== list[i - 1]) continue;
+        const k = list.findIndex((v, x) => x > i && v !== list[i] && list[x - 1] !== v && (list[x + 1] ?? -1) !== list[i]);
+        if (k > 0) [list[i], list[k]] = [list[k], list[i]];
+      }
+      pattern = list;
+    }
+
+    function apply(s) {
+      if (s && typeof s.now === 'number') skew = s.now - Date.now();
+      const prev = st;
+      st = s;
+      if (!s) return hide();
+      if (!prev || prev.id !== s.id) { spin = null; celebrated = null; lastSpot = null; }
+      buildPattern(s);
+      if ((s.phase === 'spinning' || s.phase === 'done') && (!spin || spin.id !== s.id)) {
+        const ms = s.spinMs || 8000;
+        const S = pattern.length;
+        // which of the winner's spots to stop on, and where in it, from where the roll landed
+        const pot = s.players.reduce((a, p) => a + p.amount, 0) || 1;
+        const startShare = s.players.slice(0, s.winner).reduce((a, p) => a + p.amount, 0) / pot;
+        const share = (s.players[s.winner]?.amount || 0) / pot || 1;
+        const t = Math.min(0.9, Math.max(0.1, ((s.landAt ?? startShare + share / 2) - startShare) / share));
+        const u = Math.min(0.9999, (t - 0.1) / 0.8);
+        const mine = pattern.map((v, i) => (v === s.winner ? i : -1)).filter((i) => i >= 0);
+        const pick = mine[Math.floor(u * mine.length)] ?? 0;
+        const within = 0.2 + 0.6 * ((u * mine.length) % 1);
+        const travel = Math.max(3 * S, (ms / 1000) * 9);
+        const j = pick + S * Math.ceil((pos + travel - pick) / S);
+        spin = { id: s.id, from: pos, to: j + within, start: s.spinStart || now(), ms };
+      }
+      if (s.phase === 'done' || s.phase === 'cancelled') {
+        const left = s.phase === 'done' && spin ? Math.max(0, spin.start + spin.ms - now()) : 0;
+        show();
+        hideTimer = setTimeout(hide, left + (s.hideAfterMs || 30000));
+      } else show();
+      render();
+    }
+
+    // ── Sound ──
+    let actx;
+    function tone(freq, dur, vol, type = 'triangle', delay = 0) {
+      if (!SOUND) return;
+      try {
+        actx ||= new AudioContext();
+        const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
+      } catch {}
+    }
+    const tick = () => tone(1800, 0.05, 0.06, 'square');
+    const fanfare = () => [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.7, 0.16, 'triangle', i * 0.1));
+
+    // ── Confetti ──
+    const fx = $('fx'), fcx = fx.getContext('2d');
+    let parts = [];
+    const fitFx = () => { fx.width = innerWidth; fx.height = innerHeight; };
+    addEventListener('resize', fitFx); fitFx();
+    function confetti(n = 220) {
+      const r = $('reelBox').getBoundingClientRect();
+      for (let i = 0; i < n; i++)
+        parts.push({ x: r.left + r.width / 2 + (Math.random() - 0.5) * 80, y: r.top + r.height / 2, vx: (Math.random() - 0.5) * 24, vy: -Math.random() * 15 - 5, r: Math.random() * 6 + 3, c: COLORS[(Math.random() * COLORS.length) | 0], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.4, life: 1 });
+    }
+
+    // ── Reel ──
+    const cv = $('reel'), cx = cv.getContext('2d');
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    let W = 0, H = 0;
+    function fitReel() {
+      const r = cv.getBoundingClientRect();
+      W = r.width; H = r.height;
+      cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+      cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    addEventListener('resize', fitReel); fitReel();
+    const FONT = '"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif';
+
+    function roundRect(x, y, w, h, r) {
+      cx.beginPath();
+      cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath();
+    }
+    function clip(text, maxW) {
+      let s = String(text);
+      if (cx.measureText(s).width <= maxW) return s;
+      while (s.length > 1 && cx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+      return s + '…';
+    }
+    function shade(hex, amt) {
+      const n = parseInt(hex.slice(1), 16);
+      const f = (c) => Math.max(0, Math.min(255, Math.round(c + (amt < 0 ? c : 255 - c) * amt)));
+      return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+    }
+
+    function drawReel(t) {
+      cx.clearRect(0, 0, W, H);
+      const S = pattern.length;
+      if (!st || !S) return;
+      const finished = st.phase === 'done' && spin && now() >= spin.start + spin.ms;
+      const center = W / 2;
+      const first = Math.floor(pos - center / TW) - 1;
+      const last = Math.ceil(pos + center / TW) + 1;
+      const landed = Math.floor(pos);
+      const tile = TW - 10, th = H - 22, y = 11;
+      for (let k = first; k <= last; k++) {
+        const who = pattern[((k % S) + S) % S];
+        const p = st.players[who];
+        if (!p) continue;
+        const x = center + (k - pos) * TW + 5;
+        const isWin = finished && k === landed;
+        const dim = finished && !isWin;
+        const col = COLORS[who % COLORS.length];
+        cx.save();
+        if (isWin) {
+          const s = 1.06 + Math.sin(t / 200) * 0.02;
+          cx.translate(x + tile / 2, y + th / 2); cx.scale(s, s); cx.translate(-(x + tile / 2), -(y + th / 2));
+          cx.shadowColor = 'rgba(255,215,120,.95)'; cx.shadowBlur = 26;
+        }
+        cx.globalAlpha = dim ? 0.25 : 1;
+        const g = cx.createLinearGradient(x, y, x, y + th);
+        g.addColorStop(0, shade(col, 0.12)); g.addColorStop(1, shade(col, -0.35));
+        roundRect(x, y, tile, th, 16);
+        cx.fillStyle = g; cx.fill();
+        cx.shadowBlur = 0;
+        cx.lineWidth = isWin ? 3 : 1.5;
+        cx.strokeStyle = isWin ? '#ffe39a' : 'rgba(255,255,255,.18)';
+        cx.stroke();
+        // avatar circle with their initial
+        cx.beginPath(); cx.arc(x + tile / 2, y + 44, 28, 0, Math.PI * 2);
+        cx.fillStyle = 'rgba(0,0,0,.28)'; cx.fill();
+        cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        cx.font = `800 30px ${FONT}`;
+        cx.fillText(String(p.user).replace(/^[^a-z0-9]+/i, '').charAt(0).toUpperCase() || '?', x + tile / 2, y + 45);
+        cx.font = `700 15px ${FONT}`;
+        cx.shadowColor = 'rgba(0,0,0,.5)'; cx.shadowBlur = 3;
+        cx.fillText(clip(p.user, tile - 14), x + tile / 2, y + th - 22);
+        cx.restore();
+      }
+    }
+
+    // ── Text around the reel ──
+    function render() {
+      if (!st) return;
+      $('pot').textContent = fmt(st.pot);
+      $('cur').textContent = st.currency || 'points';
+      const pill = $('pill'), foot = $('foot');
+      const n = st.players.length;
+      const rolling = st.phase === 'spinning' || (st.phase === 'done' && spin && now() < spin.start + spin.ms);
+      const won = st.phase === 'done' && !rolling;
+      let pillText, pillCls = '', footHtml, footCls = '';
+      if (st.phase === 'open') {
+        const left = Math.max(0, Math.ceil((st.endsAt - now()) / 1000));
+        pillText = `Rolls in ${left}s`;
+        if (left <= 5) pillCls = 'hot';
+        footHtml = `Type <span class="cmd">!jackpot &lt;amount&gt;</span> to join · more points = more spots`;
+      } else if (rolling) {
+        pillText = 'Rolling…';
+        pillCls = 'hot';
+        footHtml = `${n} players · winner takes it all`;
+      } else if (won) {
+        const w = st.players[st.winner];
+        pillText = 'Winner!';
+        pillCls = 'win';
+        footCls = 'win';
+        footHtml = w ? `🏆 <b>${esc(w.user)}</b> wins ${fmt(st.pot)} ${esc(st.currency || 'points')}!` : esc(st.message);
+      } else {
+        pillText = 'Refunded';
+        footHtml = esc(st.message || 'Not enough players');
+      }
+      // only touch the page when something changed (the win animation plays once)
+      if (pill.textContent !== pillText) pill.textContent = pillText;
+      if (pill.className !== `pill ${pillCls}`.trim()) pill.className = `pill ${pillCls}`.trim();
+      if (foot.innerHTML !== footHtml) foot.innerHTML = footHtml;
+      if (foot.className !== `foot ${footCls}`.trim()) foot.className = `foot ${footCls}`.trim();
+      // players, biggest first: spots and chance
+      const pot = st.pot || 1;
+      const order = st.players.map((p, i) => ({ ...p, i })).sort((a, b) => b.amount - a.amount);
+      const html = order
+        .slice(0, 6)
+        .map((p) => `<div class="chip${won ? (p.i === st.winner ? ' win' : ' out') : ''}"><i style="background:${COLORS[p.i % COLORS.length]}"></i>${esc(p.user)} <em>${spotsOf[p.i] || 1} spot${(spotsOf[p.i] || 1) === 1 ? '' : 's'} · ${Math.round((p.amount / pot) * 1000) / 10}%</em></div>`)
+        .join('') + (order.length > 6 ? `<div class="chip"><em>+${order.length - 6} more</em></div>` : '');
+      if ($('legend').innerHTML !== html) $('legend').innerHTML = html;
+    }
+
+    // ── Animation loop ──
+    let lastT = performance.now();
+    (function loop(t) {
+      const dt = Math.min(0.05, (t - lastT) / 1000);
+      lastT = t;
+      if (st) {
+        if (spin) {
+          const k = Math.min(1, Math.max(0, (now() - spin.start) / spin.ms));
+          const e = 1 - Math.pow(1 - k, 4); // fast start, long slow stop
+          pos = spin.from + (spin.to - spin.from) * e;
+          const spot = Math.floor(pos);
+          if (k < 1 && lastSpot !== null && spot !== lastSpot) tick();
+          lastSpot = spot;
+          if (k >= 1 && st.phase === 'done' && celebrated !== st.id) {
+            celebrated = st.id;
+            fanfare();
+            confetti();
+          }
+        } else if (st.phase === 'open') {
+          pos += dt * 1.1; // a slow idle drift while players join
+        }
+        render();
+      }
+      drawReel(t);
+      fcx.clearRect(0, 0, fx.width, fx.height);
+      parts = parts.filter((p) => p.life > 0 && p.y < fx.height + 40);
+      for (const p of parts) {
+        p.vy += 0.42; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; p.life -= 0.006;
+        fcx.save(); fcx.translate(p.x, p.y); fcx.rotate(p.a); fcx.globalAlpha = Math.min(1, p.life * 2); fcx.fillStyle = p.c; fcx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); fcx.restore();
+      }
+      requestAnimationFrame(loop);
+    })(performance.now());
+
+    // ── Connection ──
+    function load() {
+      fetch('/overlay/jackpot/state').then((r) => r.json()).then((s) => s && apply(s)).catch(() => {});
+    }
+    function connect() {
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      ws.onopen = load;
+      ws.onmessage = (ev) => {
+        const { type, data } = JSON.parse(ev.data);
+        if (type === 'jackpot') apply(data);
+      };
+      ws.onclose = () => setTimeout(connect, 3000);
+    }
+
+    // ?demo=1 — sample rounds on a loop for the preview in Steez.
+    function demo() {
+      const names = ['NightOwl', 'PixelPanda', 'Kappa_Kid', 'BigSpender', 'LoyalViewer', 'GG_Gamer'];
+      const amounts = [500, 1200, 300, 2500, 800, 650];
+      let round = 0;
+      const run = () => {
+        round++;
+        const start = Date.now(), openMs = 6000, spinMs = 5000;
+        const s = { id: start, phase: 'open', now: start, openedAt: start, endsAt: start + openMs, pot: 0, currency: 'points', players: [], hideAfterMs: 2500 };
+        const push = () => { s.now = Date.now(); s.pot = s.players.reduce((a, p) => a + p.amount, 0); apply(structuredClone(s)); };
+        names.forEach((n, i) => setTimeout(() => { s.players.push({ user: n, amount: amounts[(i + round) % amounts.length] }); push(); }, 300 + i * 850));
+        setTimeout(() => {
+          const total = s.players.reduce((a, p) => a + p.amount, 0);
+          let r = Math.random() * total, at = 0, w = 0;
+          for (let i = 0; i < s.players.length; i++) { if (r < s.players[i].amount) { w = i; at += s.players[i].amount * (0.1 + 0.8 * Math.random()); break; } r -= s.players[i].amount; at += s.players[i].amount; }
+          Object.assign(s, { phase: 'spinning', winner: w, landAt: at / total, spinStart: Date.now(), spinMs });
+          push();
+          setTimeout(() => { s.phase = 'done'; push(); }, spinMs);
+        }, openMs);
+        setTimeout(run, openMs + spinMs + 2500 + 2000);
+      };
+      run();
+    }
+    if (DEMO) demo();
+    else connect();
+  </script>
+</body>
+</html>

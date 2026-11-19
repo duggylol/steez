@@ -97,6 +97,13 @@ export const HELP = {
   'games.trivia.pointsHard': 'Points for answering a hard question first.',
   'games.trivia.useAI': 'Trivia asks the built-in vault of 3,000 checked questions first, each one only once. When the vault is used up, the AI writes brand-new questions (needs your Anthropic API key on the AI page): half about the game you’re playing, half random. Off = the vault starts over from the questions asked longest ago.',
   'games.trivia.aiTopic': 'Optional: once the AI takes over, a topic to use for the non-game half instead of random categories.',
+  'games.fishing.tiers': 'Chance is out of 100 (if the total isn’t 100 they’re scaled to fit). A catch pays between Min and Max points: the heavier the fish (5–20 lb), the closer to Max. Announce = shout it to the whole chat, show it on the overlay and unlock “Release the Kraken”. Catches = what can be caught, separated by commas.',
+  'games.jackpot.joinSeconds': 'How long players have to join after someone starts a jackpot with !jackpot <amount>.',
+  'games.jackpot.maxBet': 'The most one viewer can put into a round in total (0 = no limit).',
+  'games.jackpot.minPlayers': 'Fewer players than this when the countdown ends = everyone gets their points back.',
+  'games.jackpot.spinSeconds': 'How long the reel rolls before the winner is announced.',
+  'games.jackpot.hideAfterSeconds': 'The jackpot overlay slides away this long after a round ends.',
+  'games.jackpot.cooldownSeconds': 'Wait between rounds (0 = a new round can start right away).',
   'games.trivia.duringAdBreaks': 'Start a trivia round automatically when an ad break begins.',
   'overlay.ttsVoice': 'Name of a voice installed on this PC (leave empty for the default).',
   'shoutout.autoList': 'Streamers who get an automatic shoutout the first time they chat each stream (one per line).',
@@ -104,8 +111,13 @@ export const HELP = {
 const TEMPLATES = {
   'loyalty.ranks': { name: '', hours: 0 },
   'games.heist.tiers': { minPlayers: 1, name: '', successPercent: 50, payout: 2 },
+  'games.fishing.tiers': { tier: '', emoji: '🐟', chancePercent: 1, minPoints: 0, maxPoints: 100, announce: false, catches: '' },
   'shop.items': { name: '', cost: 100, effect: 'confetti', description: '', cooldownSeconds: 0 },
   redemptions: { reward: '', response: '', effect: '', command: '', points: 0 },
+};
+// Column widths for tables that need them (the rest share the space).
+const WIDTHS = {
+  'games.fishing.tiers': { tier: '11%', emoji: '64px', chancePercent: '12%', minPoints: '11%', maxPoints: '11%', announce: '84px', catches: '34%' },
 };
 const SELECTS = {
   'general.replyStyle': ['mention', 'reply'],
@@ -141,7 +153,7 @@ function objTable(arr, path) {
       h(
         'table',
         { class: 'obj-table' },
-        h('tr', {}, cols.map((c) => h('th', {}, label(c))), h('th')),
+        h('tr', {}, cols.map((c) => h('th', WIDTHS[path]?.[c] ? { style: `width:${WIDTHS[path][c]}` } : {}, label(c))), h('th')),
         arr.map((row, i) =>
           h(
             'tr',

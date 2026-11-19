@@ -183,6 +183,7 @@ async function startCore() {
     { id: 'alerts-only', module: 'Bot', name: 'Alerts only', path: '/overlay/alerts?widgets=alerts', description: 'Just the event alerts with sound and TTS.', width: 1920, height: 1080 },
     { id: 'effects', module: 'Bot', name: 'Shop effects', path: '/overlay/alerts?widgets=effects', description: 'Confetti, emote rain, TTS, shake, spotlight.', width: 1920, height: 1080 },
     { id: 'boss', module: 'Bot', name: 'Raid boss', path: '/overlay/alerts?widgets=boss', description: 'Boss HP bar and top attackers.', width: 1920, height: 1080 },
+    { id: 'jackpot', module: 'Bot', name: 'Jackpot', path: '/overlay/jackpot', description: 'The !jackpot reel: slides up when a round starts, rolls to the winner, slides away when it’s done.', width: 1280, height: 400 },
     { id: 'poll', module: 'Bot', name: 'Polls & bets', path: '/overlay/alerts?widgets=poll,bets', description: 'Live poll and betting pools.', width: 1920, height: 1080 },
   );
 
@@ -403,7 +404,9 @@ if (!app.requestSingleInstanceLock()) {
     win.setSize(1400, 880);
     for (const spec of routes) {
       // "page@Tab label" opens a page, then clicks the tab/button with that label.
-      const [r, click] = spec.split('@');
+      // "page~settings.path" opens a page and scrolls to that setting.
+      const [page, scrollTo] = spec.split('~');
+      const [r, click] = page.split('@');
       await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(r)}`);
       await sleep(1500);
       if (click) {
@@ -411,6 +414,10 @@ if (!app.requestSingleInstanceLock()) {
           `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(click)})?.click()`,
         );
         await sleep(2500);
+      }
+      if (scrollTo) {
+        await win.webContents.executeJavaScript(`document.querySelector('[data-path=${JSON.stringify(scrollTo)}]')?.scrollIntoView({ block: 'start' })`);
+        await sleep(500);
       }
       const img = await win.webContents.capturePage();
       fs.writeFileSync(path.join(dir, `${spec.replace(/[^\w-]+/g, '_')}.png`), img.toPNG());

@@ -115,10 +115,62 @@ test('games: slots, fishing, duel', async () => {
   bot.addPoints('jack', 500, 'Jack');
   assert.match(await chat('Ivy', '!slots 10'), /\[ .+ \| .+ \| .+ \]/);
   assert.match(await chat('Jack', '!fish'), /caught .+ worth/);
+  // tiers come from settings: one edited tier, so every cast lands in it
+  const savedTiers = db.settings.games.fishing.tiers;
+  db.settings.games.fishing.tiers = [{ tier: 'boot', emoji: '🥾', chancePercent: 5, minPoints: 7, maxPoints: 7, announce: false, catches: 'a test boot' }];
+  const before = bot.points('ivy');
+  assert.match(await chat('Ivy', '!fish'), /a test boot .*boot\) worth 7/);
+  assert.equal(bot.points('ivy'), before + 7);
+  db.settings.games.fishing.tiers = [{ tier: 'godlike', emoji: '🔱', chancePercent: 1, minPoints: 1000000, maxPoints: 1000000, announce: true, catches: 'a sea god' }];
+  assert.match(await chat('Kai', '!fish'), /🎣🌊 .*Kai caught a sea god .*godlike\) worth 1,000,000/);
+  db.settings.games.fishing.tiers = savedTiers;
+  const top = await chat('Zed', '!fishtop');
+  assert.match(top, /Biggest catches: 1\. Kai — a sea god .*1,000,000\) \| 2\. Ivy|Biggest catches: 1\. Kai — a sea god/);
+  assert.ok(top.indexOf('Kai') < top.indexOf('Ivy'));
+  assert.match(await chat('Kai', '!fishlog'), /godlike: 1/);
   assert.match(await chat('Ivy', '!duel Jack 100'), /challenges Jack/);
   const out = await chat('Jack', '!accept');
   assert.match(out, /defeats/);
   assert.equal(bot.points('ivy') + bot.points('jack') <= 1000 + 500, true);
+});
+
+test('jackpot: join, spin, the winner takes the whole pot', async () => {
+  const cfg = db.settings.games.jackpot;
+  const saved = { ...cfg };
+  Object.assign(cfg, { enabled: true, joinSeconds: 0.2, spinSeconds: 1, cooldownSeconds: 0, minBet: 10, maxBet: 0 });
+  bot.addPoints('jpa', 1000, 'JpA');
+  bot.addPoints('jpb', 1000, 'JpB');
+  const start = { jpa: bot.points('jpa'), jpb: bot.points('jpb') };
+  assert.match(await chat('JpA', '!jackpot 300'), /started a JACKPOT with 300/);
+  assert.match(await chat('JpB', '!jackpot 100'), /you're in with 100 \(25% chance\)\. Pot: 400/);
+  assert.match(await chat('JpB', '!jackpot 100'), /you added 100 .*now in with 200 \(40% chance\)\. Pot: 500/);
+  assert.equal(bot.points('jpa'), start.jpa - 300);
+  assert.equal(bot.points('jpb'), start.jpb - 200);
+  const st = bot.jackpotState();
+  assert.equal(st.phase, 'open');
+  assert.deepEqual(st.players.map((p) => [p.user, p.amount]), [['JpA', 300], ['JpB', 200]]);
+
+  said.length = 0;
+  await new Promise((r) => setTimeout(r, 400)); // countdown over: it rolls
+  assert.equal(bot.jackpotState().phase, 'spinning');
+  assert.match(said.join(' '), /Jackpot closed: 2 players, 500/);
+  assert.match(await chat('JpA', '!jackpot 50'), /already rolling/);
+  await new Promise((r) => setTimeout(r, 1100)); // the reel stops
+  const done = bot.jackpotState();
+  assert.equal(done.phase, 'done');
+  const winner = done.players[done.winner].user;
+  assert.match(said.join(' '), new RegExp(`${winner} WINS THE JACKPOT of 500`));
+  const w = winner.toLowerCase();
+  assert.equal(bot.points(w), start[w] - (w === 'jpa' ? 300 : 200) + 500);
+  assert.equal(bot.points('jpa') + bot.points('jpb'), start.jpa + start.jpb); // points only moved between them
+
+  // a round with one player refunds them
+  assert.match(await chat('JpA', '!jackpot 50'), /started a JACKPOT/);
+  const solo = bot.points('jpa');
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(bot.jackpotState().phase, 'cancelled');
+  assert.equal(bot.points('jpa'), solo + 50);
+  Object.assign(cfg, saved);
 });
 
 test('polls, bets and quotes', async () => {

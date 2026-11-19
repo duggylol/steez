@@ -2,16 +2,8 @@
 import { db, save, findUser, getUser, bumpStat } from '../store.js';
 import { parseAmount, randInt, pick, weightedPick, fmtNum, normLogin, todayKey, fmtDuration } from '../util.js';
 import { keep, restore, resumeAt } from '../session.js';
-
-const FISH = [
-  { tier: 'trash', weight: 22, names: ['an old boot', 'a soggy sock', 'a tin can', 'a tangle of seaweed', 'a rubber duck'], min: 0, max: 2, emoji: '🥾' },
-  { tier: 'common', weight: 40, names: ['a minnow', 'a sardine', 'a perch', 'a sunfish', 'a carp'], min: 5, max: 25, emoji: '🐟' },
-  { tier: 'uncommon', weight: 22, names: ['a bass', 'a trout', 'a catfish', 'a pike'], min: 25, max: 70, emoji: '🐠' },
-  { tier: 'rare', weight: 10, names: ['a salmon', 'a swordfish', 'a tuna', 'a pufferfish'], min: 70, max: 180, emoji: '🐡' },
-  { tier: 'epic', weight: 4.5, names: ['a golden koi', 'a giant squid', 'an anglerfish'], min: 200, max: 600, emoji: '🦑' },
-  { tier: 'legendary', weight: 1.2, names: ['THE KRAKEN', 'a shark wearing sunglasses', 'Nessie herself'], min: 1000, max: 3000, emoji: '🐙' },
-  { tier: 'mythic', weight: 0.3, names: ['a glowing treasure chest', 'the Golden Leviathan'], min: 5000, max: 10000, emoji: '💎' },
-];
+import { castFish, cleanTiers } from '../fishing.js';
+import { pickWinner, chanceOf } from '../jackpot.js';
 
 export function init(bot) {
   const G = () => db.settings.games;
@@ -207,6 +199,144 @@ export function init(bot) {
     bot.say(`🚨 The crew of ${crew.length} hits ${tier.name}...`);
   }
 
+  // ─── Jackpot ────────────────────────────────────────────────
+  // !jackpot <amount> opens a round; when the countdown ends one winner is picked, weighted by how
+  // much each player put in (more points = more spots on the overlay's reel), and they take the whole pot.
+  let jp = null; // { id, phase: open|spinning|done|cancelled, players: Map(login → { login, display, amount }), endsAt, ... }
+  let jpTimer = null;
+  let jpCooldownUntil = 0;
+  const jpPot = () => (jp ? [...jp.players.values()].reduce((s, p) => s + p.amount, 0) : 0);
+  const jackpotState = () =>
+    jp && {
+      id: jp.id,
+      phase: jp.phase,
+      now: Date.now(),
+      openedAt: jp.openedAt || jp.endsAt - G().jackpot.joinSeconds * 1000,
+      endsAt: jp.endsAt,
+      pot: jpPot(),
+      currency: bot.currency,
+      players: [...jp.players.values()].map((p) => ({ user: p.display, amount: p.amount })),
+      winner: jp.winner ?? null,
+      landAt: jp.landAt ?? null,
+      spinStart: jp.spinStart ?? null,
+      spinMs: jp.spinMs ?? null,
+      hideAfterMs: Math.max(5, G().jackpot.hideAfterSeconds || 30) * 1000,
+      message: jp.message || '',
+    };
+  bot.jackpotState = jackpotState;
+  const showJackpot = () => bot.overlay('jackpot', jackpotState());
+  const saveJackpot = () => keep('jackpot', jp?.phase === 'open' ? { players: [...jp.players.values()], endsAt: jp.endsAt } : null);
+  // After a round is over it stays on screen a while, then it's cleared (the overlay slides away).
+  function endRound() {
+    const id = jp.id;
+    saveJackpot();
+    showJackpot();
+    jpCooldownUntil = Date.now() + Math.max(0, G().jackpot.cooldownSeconds || 0) * 1000;
+    setTimeout(() => {
+      if (jp?.id !== id) return;
+      jp = null;
+      showJackpot();
+    }, Math.max(5, G().jackpot.hideAfterSeconds || 30) * 1000);
+  }
+  function spinJackpot() {
+    clearTimeout(jpTimer);
+    if (jp?.phase !== 'open') return;
+    const cfg = G().jackpot;
+    const players = [...jp.players.values()];
+    const pot = jpPot();
+    if (players.length < Math.max(2, cfg.minPlayers || 2)) {
+      for (const p of players) bot.addPoints(p.login, p.amount);
+      jp.phase = 'cancelled';
+      jp.message = 'Not enough players — points refunded';
+      bot.say(`🎰 Not enough players joined the jackpot, so ${players.map((p) => p.display).join(', ')} got their ${bot.currency} back.`);
+      return endRound();
+    }
+    const w = pickWinner(players);
+    const winner = players[w.index];
+    bot.addPoints(winner.login, pot); // paid now, announced when the reel stops
+    bumpStat(getUser(winner.login, winner.display), 'jackpotsWon');
+    Object.assign(jp, { phase: 'spinning', winner: w.index, landAt: w.at, spinStart: Date.now(), spinMs: Math.max(1, cfg.spinSeconds || 8) * 1000 });
+    saveJackpot();
+    showJackpot();
+    bot.say(`🎰 Jackpot closed: ${players.length} players, ${bot.fmtPoints(pot)} in the pot. Rolling... 🎲`);
+    const id = jp.id;
+    setTimeout(() => {
+      if (jp?.id !== id) return;
+      jp.phase = 'done';
+      jp.message = `${winner.display} wins ${fmtNum(pot)} ${bot.currency}!`;
+      bot.say(`🎉 ${winner.display} WINS THE JACKPOT of ${bot.fmtPoints(pot)} with a ${chanceOf(winner.amount, pot)} chance! 💰`);
+      endRound();
+    }, jp.spinMs);
+  }
+  {
+    // A round that was open when Steez closed carries on (the players' points are in it).
+    const saved = restore('jackpot');
+    if (saved?.players?.length) {
+      jp = { id: Date.now(), phase: 'open', players: new Map(saved.players.map((p) => [p.login, p])), endsAt: resumeAt(saved.endsAt) };
+      jpTimer = setTimeout(spinJackpot, Math.max(5000, jp.endsAt - Date.now()));
+    } else keep('jackpot', null);
+  }
+  bot.action('jackpot:state', () => jackpotState());
+  bot.action('jackpot:cancel', () => cancelJackpot());
+  function cancelJackpot() {
+    if (jp?.phase !== 'open') return false;
+    clearTimeout(jpTimer);
+    for (const p of jp.players.values()) bot.addPoints(p.login, p.amount);
+    jp.phase = 'cancelled';
+    jp.message = 'Jackpot cancelled — points refunded';
+    bot.say('🎰 The jackpot was cancelled. Everyone got their points back.');
+    endRound();
+    return true;
+  }
+  bot.command('jackpot', {
+    description: 'Put points in the jackpot: one winner, picked by points put in, takes the whole pot',
+    usage: '!jackpot <amount>',
+    aliases: ['jp'],
+    handler: (ctx, [arg]) => {
+      const cfg = G().jackpot;
+      if (!cfg.enabled) return false;
+      const word = String(arg || '').toLowerCase();
+      if (word === 'cancel' || word === 'stop') {
+        if (!bot.hasLevel(ctx.user, 'moderator')) return false;
+        if (!cancelJackpot()) bot.reply(ctx, 'there is no jackpot to cancel.');
+        return;
+      }
+      const open = jp?.phase === 'open';
+      if (!arg) {
+        if (open) {
+          const left = Math.max(0, Math.ceil((jp.endsAt - Date.now()) / 1000));
+          return bot.reply(ctx, `🎰 ${jp.players.size} in the jackpot, ${bot.fmtPoints(jpPot())} in the pot. Spins in ${left}s. Join with !jackpot <amount>`), false;
+        }
+        return bot.reply(ctx, `start a jackpot with !jackpot <amount>. Everyone who joins in the next ${cfg.joinSeconds}s is in the draw (more points = more spots) and the winner takes the whole pot.`), false;
+      }
+      if (jp?.phase === 'spinning') return bot.reply(ctx, 'the jackpot is already rolling. Wait for the next round!'), false;
+      if (!open && Date.now() < jpCooldownUntil) return bot.reply(ctx, `the next jackpot opens in ${fmtDuration(jpCooldownUntil - Date.now())}.`), false;
+      const mine = open ? jp.players.get(ctx.user.login) : null;
+      if (mine && cfg.maxBet > 0 && mine.amount >= cfg.maxBet) return bot.reply(ctx, `you're already in with the most you can put in (${bot.fmtPoints(cfg.maxBet)}).`), false;
+      let n = bet(ctx, arg, cfg);
+      if (!n) return false;
+      if (mine && cfg.maxBet > 0) n = Math.min(n, cfg.maxBet - mine.amount);
+      bot.takePoints(ctx.user.login, n);
+      if (!open) {
+        // a finished round still on screen is replaced by the new one
+        jp = { id: Date.now(), phase: 'open', players: new Map(), openedAt: Date.now(), endsAt: Date.now() + cfg.joinSeconds * 1000 };
+        jp.players.set(ctx.user.login, { login: ctx.user.login, display: ctx.user.display, amount: n });
+        clearTimeout(jpTimer);
+        jpTimer = setTimeout(spinJackpot, cfg.joinSeconds * 1000);
+        saveJackpot();
+        showJackpot();
+        bot.say(`🎰 ${ctx.user.display} started a JACKPOT with ${bot.fmtPoints(n)}! Type !jackpot <amount> to join (more points = more spots). It rolls in ${cfg.joinSeconds}s and the winner takes the whole pot!`);
+        return;
+      }
+      if (mine) mine.amount += n;
+      else jp.players.set(ctx.user.login, { login: ctx.user.login, display: ctx.user.display, amount: n });
+      saveJackpot();
+      showJackpot();
+      const me = jp.players.get(ctx.user.login);
+      bot.reply(ctx, `${mine ? `you added ${bot.fmtPoints(n)}, now in with` : "you're in with"} ${fmtNum(me.amount)} (${chanceOf(me.amount, jpPot())} chance). Pot: ${bot.fmtPoints(jpPot())}`);
+    },
+  });
+
   // ─── Roulette ───────────────────────────────────────────────
   bot.command('roulette', {
     description: 'Russian roulette — lose and get timed out',
@@ -238,10 +368,7 @@ export function init(bot) {
     },
     handler: (ctx) => {
       if (!G().fishing.enabled) return false;
-      const tier = weightedPick(FISH);
-      const name = pick(tier.names);
-      const size = Math.round((Math.random() * 1.5 + 0.5) * 100) / 10; // 5.0 - 20.0
-      const value = Math.round(randInt(tier.min, tier.max) * (size / 10));
+      const { tier, name, size, value } = castFish(G().fishing.tiers);
       const u = getUser(ctx.user.login, ctx.user.display);
       u.fish ||= { catches: 0, best: null, tiers: {} };
       u.fish.catches++;
@@ -251,7 +378,7 @@ export function init(bot) {
       save();
       if (value) bot.addPoints(ctx.user.login, value);
       const msg = `${tier.emoji} ${ctx.user.display} caught ${name} (${size}lb, ${tier.tier}) worth ${bot.fmtPoints(value)}!${isBest && u.fish.catches > 1 ? ' New personal best! 🏅' : ''}`;
-      if (['legendary', 'mythic'].includes(tier.tier)) {
+      if (tier.announce) {
         bot.say(`🎣🌊 ${msg} 🌊`);
         bot.overlay('alert', { type: 'fish', user: ctx.user.display, message: `caught ${name}!`, amount: value });
         bot.emit('achievement:unlock', ctx.user.login, 'kraken');
@@ -265,10 +392,31 @@ export function init(bot) {
       const u = findUser(normLogin(args[0]) || ctx.user.login);
       if (!u?.fish) return bot.reply(ctx, 'no fish caught yet. Try !fish');
       const t = u.fish.tiers;
+      // the rarest tiers they've caught, rarest first
+      const rarest = cleanTiers(G().fishing.tiers)
+        .sort((a, b) => a.chance - b.chance)
+        .filter((x) => t[x.tier])
+        .slice(0, 4)
+        .map((x) => `${x.tier}: ${t[x.tier]}`)
+        .join(', ');
       bot.reply(
         ctx,
-        `${u.display}: ${u.fish.catches} catches | best: ${u.fish.best.name} (${u.fish.best.size}lb, ${fmtNum(u.fish.best.value)}) | legendary+: ${(t.legendary || 0) + (t.mythic || 0)}, epic: ${t.epic || 0}, rare: ${t.rare || 0}`,
+        `${u.display}: ${u.fish.catches} catches | best: ${u.fish.best.name} (${u.fish.best.size}lb, ${fmtNum(u.fish.best.value)})${rarest ? ` | ${rarest}` : ''}`,
       );
+    },
+  });
+  bot.command('fishtop', {
+    description: 'The biggest catches in the channel',
+    aliases: ['topfish', 'fishleaderboard'],
+    cooldown: 30,
+    handler: () => {
+      const skip = new Set([...(db.settings.general.ignoredUsers || []).map(normLogin), bot.state.botLogin, bot.relay?.info?.login, bot.state.channel]);
+      const top = Object.values(db.users)
+        .filter((u) => u.fish?.best && !skip.has(u.login))
+        .sort((a, b) => b.fish.best.value - a.fish.best.value || b.fish.best.size - a.fish.best.size)
+        .slice(0, 5);
+      if (!top.length) return bot.say('🎣 Nobody has caught a fish yet. Be the first: !fish');
+      bot.say(`🎣 Biggest catches: ${top.map((u, i) => `${i + 1}. ${u.display} — ${u.fish.best.name} (${u.fish.best.size}lb, ${fmtNum(u.fish.best.value)})`).join(' | ')}`);
     },
   });
 

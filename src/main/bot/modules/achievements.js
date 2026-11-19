@@ -22,7 +22,7 @@ export const ACHIEVEMENTS = [
   { id: 'night_owl', name: 'Night Owl', icon: '🦉', desc: 'Chat between 2 and 5 AM (streamer time)' },
   { id: 'jackpot', name: 'Jackpot!', icon: '🎰', desc: 'Hit the slots jackpot' },
   { id: 'all_in_win', name: 'Fortune Favors the Bold', icon: '🎲', desc: 'Win a gamble going all-in' },
-  { id: 'kraken', name: 'Release the Kraken', icon: '🐙', desc: 'Catch a legendary fish' },
+  { id: 'kraken', name: 'Release the Kraken', icon: '🐙', desc: 'Catch a legendary fish or better' },
   { id: 'boss_slayer', name: 'Boss Slayer', icon: '🐉', desc: 'Be the MVP against a raid boss' },
   { id: 'heist_survivor', name: 'Smooth Criminal', icon: '🕶️', desc: 'Survive a heist' },
   { id: 'lucky', name: 'Lucky Winner', icon: '🍀', desc: 'Win a giveaway' },
