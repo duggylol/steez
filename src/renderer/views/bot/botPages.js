@@ -660,6 +660,45 @@ function pageGames(main, on) {
         : `All ${fmtN(v.total)} vault questions have been asked. New ones come from the AI now.`;
     }).catch(() => {});
   drawVault();
+  // Gambling PnL: what chat has put into the points games and got back
+  const pnlBox = h('div', { class: 'muted' }, 'Loading…');
+  const signed = (n) => (n > 0 ? `+${fmtN(n)}` : n < 0 ? `−${fmtN(-n)}` : '0');
+  const tone = (n) => `color:${n > 0 ? 'var(--ok)' : n < 0 ? 'var(--bad)' : 'inherit'}`;
+  const drawPnl = () =>
+    api.action('pnl:report').then((r) => {
+      if (!r) return;
+      if (!r.plays) return put(pnlBox, h('p', { class: 'muted small' }, 'No gambling yet. Every !gamble, !slots, !duel, !heist, !jackpot and !bet result is counted from now on. Viewers can check theirs with !pnl.'));
+      const stat = (v, l, style = '') => h('div', { class: 'stat' }, h('b', { style }, v), h('span', {}, l));
+      const people = (title, list) =>
+        h('div', { class: 'sub-group', style: 'margin:0' },
+          h('div', { class: 'sg-title' }, title),
+          list.length
+            ? list.map((p, i) => h('div', { class: 'row', style: 'justify-content:space-between;padding:4px 0' }, h('span', {}, `${i + 1}. ${p.user}`), h('b', { style: tone(p.net) }, signed(p.net))))
+            : h('div', { class: 'muted small' }, 'Nobody yet'));
+      put(pnlBox,
+        h('div', { style: 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px' },
+          stat(fmtN(r.plays), `plays by ${fmtN(r.players)} viewer${r.players === 1 ? '' : 's'}`),
+          stat(fmtN(r.staked), `${S.settings.loyalty.currencyName || 'points'} wagered`),
+          stat(fmtN(r.paid), 'paid back out'),
+          stat(signed(r.net), r.net < 0 ? 'chat net (the house is up)' : 'chat net (chat is up)', tone(r.net)),
+        ),
+        h('table', { style: 'margin-top:12px' },
+          h('tr', {}, ['Game', 'Plays', 'Viewers', 'Win rate', 'Wagered', 'Paid out', 'Chat net'].map((t) => h('th', {}, t))),
+          r.games.filter((g) => g.plays).sort((a, b) => b.staked - a.staked).map((g) =>
+            h('tr', {},
+              h('td', {}, h('b', {}, g.label)),
+              h('td', {}, fmtN(g.plays)),
+              h('td', {}, fmtN(g.players)),
+              h('td', {}, `${Math.round((g.wins / g.plays) * 100)}%`),
+              h('td', {}, fmtN(g.staked)),
+              h('td', {}, fmtN(g.paid)),
+              h('td', { style: tone(g.net) }, h('b', {}, signed(g.net))),
+            )),
+        ),
+        h('div', { class: 'group-grid', style: 'margin-top:12px' }, people('📈 Most up', r.winners), people('📉 Most down', r.losers)),
+      );
+    }).catch(() => {});
+  drawPnl();
   const sw = h('input', { placeholder: 'secret word', value: S.settings.games.secretWord.word });
   const swr = h('input', { type: 'number', value: S.settings.games.secretWord.reward, style: 'max-width:120px' });
   add(main, 
@@ -667,6 +706,14 @@ function pageGames(main, on) {
       card('Raid boss', bossBox, h('div', { class: 'row', style: 'margin-top:8px' }, hp, btn('Spawn boss', () => api.action('boss:spawn', { hp: hp.value }), 'primary'))),
       card('Trivia', vaultBox, h('div', { class: 'row' }, topic, btn('Start round', () => api.action('trivia:start', { topic: topic.value }).then(drawVault), 'primary'))),
       card('Secret word', h('p', { class: 'muted small' }, 'First viewer to say this word in chat wins. Nobody sees it but you.'), h('div', { class: 'row' }, sw, swr, btn('Set', () => api.action('secretword:set', { word: sw.value, reward: swr.value }).then(() => toast(sw.value ? 'Secret word armed 🤫' : 'Cleared')), 'primary'))),
+    ),
+    card('Gambling PnL',
+      h('p', { class: 'muted small', style: 'margin-top:0' }, 'Profit & loss from every points game: gamble, slots, duels, heists, the jackpot and !bet. Viewers see theirs with !pnl, and !pnl top shows who’s most up and down.'),
+      pnlBox,
+      h('div', { class: 'row', style: 'margin-top:12px' },
+        btn('Refresh', drawPnl, 'sm'),
+        btn('Reset everyone’s PnL', () => confirm('Start everyone’s gambling PnL over from zero? Points are not touched.') && api.action('pnl:reset').then(() => (toast('PnL reset'), drawPnl())), 'sm danger'),
+      ),
     ),
     settingsForm('games', { title: 'Game settings', keys: Object.keys(S.settings.games).filter((k) => k !== 'secretWord') }),
   );

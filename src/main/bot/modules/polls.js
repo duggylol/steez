@@ -2,6 +2,7 @@
 import { broadcast } from '../web/hub.js';
 import { fmtNum, parseAmount } from '../util.js';
 import { keep, restore, resumeAt } from '../session.js';
+import { recordPlay } from '../pnl.js';
 
 export function init(bot) {
   // ─── Polls ──────────────────────────────────────────────────
@@ -131,8 +132,10 @@ export function init(bot) {
       for (const [login, w] of winners) {
         const payout = Math.floor((w.amount / winPool) * pot);
         bot.addPoints(login, payout);
+        recordPlay(login, w.display, 'bets', w.amount, payout);
         if (!biggest || payout > biggest.payout) biggest = { display: w.display, payout };
       }
+      for (const [login, w] of all) if (w.option !== winIndex) recordPlay(login, w.display, 'bets', w.amount, 0);
       msg = `🎲 "${bets.options[winIndex]}" wins! ${winners.length} winner(s) split ${bot.fmtPoints(pot)}. Biggest payout: ${biggest.display} (+${fmtNum(biggest.payout)})`;
     }
     bets = null;

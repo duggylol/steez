@@ -173,6 +173,54 @@ test('jackpot: join, spin, the winner takes the whole pot', async () => {
   Object.assign(cfg, saved);
 });
 
+test('gambling PnL: every game records what went in and what came back', async () => {
+  await bot.runAction('pnl:reset');
+  const { viewerPnl } = await import('../src/main/bot/pnl.js');
+  bot.addPoints('pna', 5000, 'PnA');
+  bot.addPoints('pnb', 5000, 'PnB');
+  db.settings.games.gamble.enabled = true;
+
+  // gamble: the PnL matches the points that actually moved
+  const before = bot.points('pna');
+  await chat('PnA', '!gamble 100');
+  let p = viewerPnl(db.users.pna);
+  assert.equal(p.plays, 1);
+  assert.equal(p.staked, 100);
+  assert.ok([0, 200, 300].includes(p.paid), `paid ${p.paid}`);
+  assert.equal(bot.points('pna') - before, p.net);
+
+  // duel: one side's win is the other's loss
+  await chat('PnA', '!duel PnB 50');
+  await chat('PnB', '!accept');
+  const duelNet = (login) => viewerPnl(db.users[login]).games.find((g) => g.game === 'duel');
+  assert.equal(duelNet('pna').net + duelNet('pnb').net, 0);
+  assert.equal(Math.abs(duelNet('pna').net), 50);
+
+  // bets: winners get the pot split, losers lose their stake
+  await bot.runAction('bets:open', { question: 'PnL?', options: ['yes', 'no'] });
+  await chat('PnA', '!bet 1 100');
+  await chat('PnB', '!bet 2 300');
+  await bot.runAction('bets:resolve', { option: 0 });
+  const bet = (login) => viewerPnl(db.users[login]).games.find((g) => g.game === 'bets');
+  assert.deepEqual([bet('pna').staked, bet('pna').paid, bet('pna').net], [100, 400, 300]);
+  assert.deepEqual([bet('pnb').staked, bet('pnb').paid, bet('pnb').net], [300, 0, -300]);
+
+  // !pnl and !pnl top
+  assert.match(await chat('PnB', '!pnl'), /📉 PnB: -\d[\d,]* points over 2 plays .*Bets -300/);
+  assert.match(await chat('Zed', '!pnl PnA'), /PnA: [+-]?\d[\d,]* points over 3 plays/);
+  assert.match(await chat('Zoe', '!pnl nobodyhere'), /nobodyhere hasn't chatted here yet/); // !pnl has a per-viewer cooldown
+  assert.match(await chat('Zia', '!pnl top'), /Most up: 1\. PnA \+.* Most down: 1\. PnB -/);
+
+  // the dashboard report adds it all up
+  const r = await bot.runAction('pnl:report');
+  assert.equal(r.players, 2);
+  assert.equal(r.plays, 5);
+  assert.equal(r.games.find((g) => g.game === 'bets').net, 0);
+  assert.equal(r.net, r.paid - r.staked);
+  await bot.runAction('pnl:reset');
+  assert.equal((await bot.runAction('pnl:report')).plays, 0);
+});
+
 test('polls, bets and quotes', async () => {
   assert.match(await chat('Moddy', '!poll Best snack? | Chips | Cookies', 'moderator'), /POLL/);
   await chat('Kim', '!vote 2');

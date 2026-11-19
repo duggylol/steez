@@ -4,6 +4,7 @@ import { parseAmount, randInt, pick, weightedPick, fmtNum, normLogin, todayKey, 
 import { keep, restore, resumeAt } from '../session.js';
 import { castFish, cleanTiers } from '../fishing.js';
 import { pickWinner, chanceOf } from '../jackpot.js';
+import { recordPlay, viewerPnl, channelPnl, resetPnl } from '../pnl.js';
 
 export function init(bot) {
   const G = () => db.settings.games;
@@ -45,11 +46,13 @@ export function init(bot) {
       const u = findUser(ctx.user.login);
       if (roll <= cfg.loseUpTo) {
         bot.addPoints(ctx.user.login, -n);
+        recordPlay(ctx.user.login, ctx.user.display, 'gamble', n, 0);
         bumpStat(u, 'gambleLosses');
         bot.reply(ctx, `rolled ${roll} and lost ${bot.fmtPoints(n)} 💸 Now: ${fmtNum(u.points)}.`);
       } else {
         const mult = roll >= cfg.jackpotFrom ? 3 : 2;
         bot.addPoints(ctx.user.login, n * (mult - 1));
+        recordPlay(ctx.user.login, ctx.user.display, 'gamble', n, n * mult);
         bumpStat(u, 'gambleWins');
         bot.reply(ctx, `rolled ${roll} and won ${bot.fmtPoints(n * mult)}${mult === 3 ? ' — JACKPOT! 🎰' : '!'} 🎉 Now: ${fmtNum(u.points)}.`);
         if (allIn && n >= 100) bot.emit('achievement:unlock', ctx.user.login, 'all_in_win');
@@ -78,6 +81,7 @@ export function init(bot) {
       else if (max === 2) mult = cfg.doubleMultiplier;
       const win = Math.floor(n * mult);
       bot.addPoints(ctx.user.login, win - n);
+      recordPlay(ctx.user.login, ctx.user.display, 'slots', n, win);
       const line = `[ ${reels.join(' | ')} ]`;
       if (mult >= cfg.jackpotMultiplier) {
         bot.say(`🎰 ${line} 💥 JACKPOT!!! ${ctx.user.display} won ${bot.fmtPoints(win)}!`);
@@ -119,6 +123,8 @@ export function init(bot) {
       const loser = winner === d.from ? ctx.user : d.from;
       bot.addPoints(winner.login, d.amount);
       bot.addPoints(loser.login, -d.amount);
+      recordPlay(winner.login, winner.display, 'duel', d.amount, d.amount * 2);
+      recordPlay(loser.login, loser.display, 'duel', d.amount, 0);
       const w = findUser(winner.login);
       bumpStat(w, 'duelWins');
       const moves = ['a perfectly timed parry', 'a flying kick', 'a rubber chicken', 'pure aura', 'a critical hit', 'sheer audacity'];
@@ -187,9 +193,10 @@ export function init(bot) {
         const won = Math.floor(m.amount * tier.payout);
         bot.addPoints(m.user.login, won);
         survivors.push(`${m.user.display} (${fmtNum(won)})`);
+        recordPlay(m.user.login, m.user.display, 'heist', m.amount, won);
         bumpStat(getUser(m.user.login), 'heistsSurvived');
         bot.emit('achievement:unlock', m.user.login, 'heist_survivor');
-      }
+      } else recordPlay(m.user.login, m.user.display, 'heist', m.amount, 0);
     }
     setTimeout(() => {
       if (!survivors.length) bot.say(`🚓 The crew of ${crew.length} tried to rob ${tier.name}... and everyone got caught! All bets lost.`);
@@ -254,6 +261,7 @@ export function init(bot) {
     const w = pickWinner(players);
     const winner = players[w.index];
     bot.addPoints(winner.login, pot); // paid now, announced when the reel stops
+    players.forEach((p, i) => recordPlay(p.login, p.display, 'jackpot', p.amount, i === w.index ? pot : 0));
     bumpStat(getUser(winner.login, winner.display), 'jackpotsWon');
     Object.assign(jp, { phase: 'spinning', winner: w.index, landAt: w.at, spinStart: Date.now(), spinMs: Math.max(1, cfg.spinSeconds || 8) * 1000 });
     saveJackpot();
@@ -336,6 +344,35 @@ export function init(bot) {
       bot.reply(ctx, `${mine ? `you added ${bot.fmtPoints(n)}, now in with` : "you're in with"} ${fmtNum(me.amount)} (${chanceOf(me.amount, jpPot())} chance). Pot: ${bot.fmtPoints(jpPot())}`);
     },
   });
+
+  // ─── Gambling PnL ───────────────────────────────────────────
+  const signed = (n) => (n > 0 ? `+${fmtNum(n)}` : n < 0 ? `-${fmtNum(-n)}` : '0');
+  const pnlSkip = () => new Set([...(db.settings.general.ignoredUsers || []).map(normLogin), bot.state.botLogin, bot.relay?.info?.login, bot.state.channel]);
+  bot.command('pnl', {
+    description: 'Your gambling profit & loss (gamble, slots, duel, heist, jackpot, bets)',
+    usage: '!pnl [user|top]',
+    aliases: ['profit', 'gamblestats'],
+    userCooldown: 10,
+    handler: (ctx, [arg]) => {
+      if (/^(top|lb|leaderboard)$/i.test(arg || '')) {
+        const r = channelPnl({ skip: pnlSkip(), top: 3 });
+        if (!r.plays) return bot.say('📊 No gambling yet. Try !gamble, !slots or !jackpot');
+        const list = (xs) => xs.map((p, i) => `${i + 1}. ${p.user} ${signed(p.net)}`).join(' | ') || 'nobody';
+        return bot.say(`📈 Most up: ${list(r.winners)} · 📉 Most down: ${list(r.losers)}`);
+      }
+      const u = findUser(normLogin(arg) || ctx.user.login);
+      if (arg && !u) return bot.reply(ctx, `${normLogin(arg)} hasn't chatted here yet.`);
+      const p = viewerPnl(u);
+      if (!p.plays) return bot.reply(ctx, `${u ? `${u.display} hasn't` : "you haven't"} gambled yet.`);
+      const games = p.games.slice(0, 4).map((g) => `${g.label} ${signed(g.net)}`).join(' · ');
+      bot.reply(
+        ctx,
+        `${p.net >= 0 ? '📈' : '📉'} ${u.display}: ${signed(p.net)} ${bot.currency} over ${fmtNum(p.plays)} plays (won ${Math.round((p.wins / p.plays) * 100)}%) | ${games} | best ${signed(p.best)} · worst ${signed(p.worst)}`,
+      );
+    },
+  });
+  bot.action('pnl:report', () => channelPnl({ skip: pnlSkip() }));
+  bot.action('pnl:reset', () => (resetPnl(), true));
 
   // ─── Roulette ───────────────────────────────────────────────
   bot.command('roulette', {
