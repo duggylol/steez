@@ -84,3 +84,62 @@ test('control level "broadcaster" locks mods out of control tools', async () => 
   assert.ok(names.includes('queue_song'));
   db.settings.ai.controlLevel = 'moderator';
 });
+
+test('chat memory: every message is saved and the AI remembers what a viewer said in earlier streams', async () => {
+  const { getUser } = await import('../src/main/bot/store.js');
+  getUser('oldtimer', 'OldTimer');
+  const weekAgo = Date.now() - 7 * 86400000;
+  bot.chatHistory.add({ t: weekAgo, login: 'oldtimer', user: 'OldTimer', text: 'my cat is named Biscuit' });
+  bot.chatHistory.add({ t: weekAgo + 1000, login: 'someoneelse', user: 'SomeoneElse', text: 'elden ring is the best' });
+
+  script = [{ content: [{ type: 'text', text: 'Biscuit!' }], stop_reason: 'end_turn' }];
+  const before = requests.length;
+  await ask('OldTimer', 'everyone', '!ask what is my cat called?');
+  const req = requests[before];
+  assert.ok(req.tools.some((t) => t.name === 'chat_history'), 'viewers get the history tool');
+  const prompt = req.messages[0].content;
+  assert.match(prompt, /What you remember about OldTimer/);
+  assert.match(prompt, /my cat is named Biscuit/);
+  assert.doesNotMatch(prompt, /elden ring/, 'only their own messages are added automatically');
+  assert.match(req.system, /chat_history/);
+
+  // today's chat was saved too (the question itself and the bot's reply)
+  bot.chatHistory.flush();
+  const today = bot.chatHistory.search({ login: 'oldtimer', since: Date.now() - 60000 });
+  assert.ok(today.some((r) => r.m.includes('what is my cat called')));
+});
+
+test('chat memory: the AI looks up anyone with the chat_history tool', async () => {
+  script = [
+    { content: [{ type: 'tool_use', id: 'toolu_h', name: 'chat_history', input: { username: '@SomeoneElse', contains: 'ELDEN' } }], stop_reason: 'tool_use' },
+    { content: [{ type: 'text', text: 'They love Elden Ring.' }], stop_reason: 'end_turn' },
+  ];
+  const before = requests.length;
+  await ask('Curious', 'everyone', '!ask what does SomeoneElse think of elden ring?');
+  const result = requests[before + 1].messages.at(-1).content[0];
+  assert.equal(result.tool_use_id, 'toolu_h');
+  const out = JSON.parse(result.content);
+  assert.equal(out.found, 1);
+  assert.match(out.messages, /SomeoneElse: elden ring is the best/);
+  assert.ok(out.history_starts);
+  assert.ok(said.some((t) => t.includes('They love Elden Ring')));
+  const info = await bot.runAction('ai:memory');
+  assert.ok(info.on && info.days >= 2 && info.bytes > 0);
+});
+
+test('chat memory off: nothing is saved and there is no history tool', async () => {
+  db.settings.ai.chatMemory = false;
+  try {
+    bot.chatHistory.flush();
+    const count = () => bot.chatHistory.search({ limit: 10000 }).length;
+    const n = count();
+    script = [{ content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }];
+    const before = requests.length;
+    await ask('OldTimer', 'moderator', '!ask secret stuff'); // a mod, so the 30s viewer cooldown doesn't apply
+    assert.ok(!requests[before].tools?.some((t) => t.name === 'chat_history'));
+    assert.doesNotMatch(requests[before].messages[0].content, /What you remember/);
+    assert.equal(count(), n);
+  } finally {
+    db.settings.ai.chatMemory = true;
+  }
+});

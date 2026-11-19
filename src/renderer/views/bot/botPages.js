@@ -85,6 +85,7 @@ export const HELP = {
   'ai.songRequests': 'Viewers can ask the AI for songs ("@bot play something chill").',
   'ai.songRequestLevel': 'Who can request songs through the AI.',
   'ai.respondToMentions': 'Reply when someone @mentions the bot account.',
+  'ai.chatMemory': 'Save every chat message on this PC so the AI remembers viewers and can look up anything said in earlier streams.',
   'ai.autoTranslate': 'Automatically translate messages written in non-Latin scripts (Cyrillic, CJK, Arabic, ...).',
   'ai.firstMessageSpamCheck': 'Ask the AI whether first-time chatter messages are spam and delete them.',
   'hype.threshold': 'A hype moment = chat speed this many times above its normal baseline.',
@@ -559,6 +560,12 @@ function pageAI(main) {
     ),
   );
   const out = h('div', { class: 'mono', style: 'margin-top:10px;white-space:pre-wrap' });
+  const memoryBox = h('div', { class: 'help', style: 'margin:2px 0 0' });
+  api.action('ai:memory').then((m) => {
+    if (!m) return;
+    const size = m.bytes >= 1048576 ? `${(m.bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(m.bytes / 1024))} KB`;
+    memoryBox.textContent = !m.on ? 'Off (turn on Chat memory in AI settings).' : m.days ? `Saved chat since ${m.since} · ${m.days} day${m.days === 1 ? '' : 's'} · ${size}` : 'Saving chat from now on.';
+  }).catch(() => {});
   const prompt = h('input', { placeholder: 'Ask or tell it to do something — e.g. "play my chill playlist" or "start a poll: best snack?"' });
   add(main, 
     h('div', { class: 'grid2' },
@@ -570,6 +577,7 @@ Did: ${r.actions.join(', ')}` : ''); }, 'primary')), out),
         card('What the AI can do',
           h('ul', {},
             h('li', {}, h('b', {}, '@mention the bot / !ask'), ' — answers with the context of recent chat, title and game'),
+            h('li', {}, h('b', {}, 'Chat memory'), ' — remembers what each viewer said before, across streams ("@bot what did I say about Elden Ring last week?")', memoryBox),
             h('li', {}, h('b', {}, 'Takes actions'), ' — "@bot play Blinding Lights", "play my gym playlist", "skip", "volume 40", "start a poll…", "giveaway for a Steam key", "next game in the queue", "shout out xyz", "clip that" — limited by who is asking'),
             h('li', {}, h('b', {}, '!catchup [minutes]'), ' — “what did I miss?” summary of chat'),
             h('li', {}, h('b', {}, '!translate'), ' + optional auto-translation of foreign-script messages'),

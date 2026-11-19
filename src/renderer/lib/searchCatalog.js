@@ -12,7 +12,7 @@ export const PAGES = [
   { id: 'commands', title: 'Commands', description: 'Custom chat commands and their responses', keywords: ['command', 'cmd', 'chat commands', 'response', 'variables', 'counter'] },
   { id: 'timers', title: 'Timers', description: 'Messages the bot posts on a schedule', keywords: ['timed messages', 'repeat', 'auto message', 'interval', 'announcements'] },
   { id: 'quotes', title: 'Quotes', description: 'The quote book: !quote and !addquote', keywords: ['quote', 'quotes', 'addquote'] },
-  { id: 'ai', title: 'AI', description: 'Claude in chat: answers @mentions, !ask, translations, AI trivia', keywords: ['claude', 'ask', 'chatbot brain', 'api key', 'anthropic', 'translate'] },
+  { id: 'ai', title: 'AI', description: 'Claude in chat: answers @mentions, !ask, translations, AI trivia', keywords: ['claude', 'ask', 'chatbot brain', 'api key', 'anthropic', 'translate', 'chat memory', 'chat history', 'message history', 'remember viewers', 'chat log'] },
   { id: 'moderation', title: 'Moderation', description: 'Spam filters, banned words, caps, links and shield mode', keywords: ['ban', 'timeout', 'filter', 'spam', 'caps', 'links', 'banned words', 'shield', 'follow bots', 'automod'] },
   { id: 'modpanel', title: 'Mod Panel', description: 'A web panel your moderators can use', keywords: ['moderators', 'mods', 'remote', 'panel', 'link'] },
   { id: 'loyalty', title: 'Points & Viewers', description: 'Loyalty points, watch time, ranks and viewer list', keywords: ['points', 'loyalty', 'currency', 'watch time', 'ranks', 'viewers', 'leaderboard', 'give points'] },
