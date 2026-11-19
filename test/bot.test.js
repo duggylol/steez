@@ -173,6 +173,69 @@ test('jackpot: join, spin, the winner takes the whole pot', async () => {
   Object.assign(cfg, saved);
 });
 
+test('plinko: balls cost the amount each, pay their multipliers, and reach the overlay', async () => {
+  const { PLINKO_TIMING } = await import('../src/main/bot/plinko.js');
+  const { viewerPnl } = await import('../src/main/bot/pnl.js');
+  const savedT = { ...PLINKO_TIMING };
+  Object.assign(PLINKO_TIMING, { revealMs: 0, staggerMs: 1, stepMs: 1, settleMs: 0 });
+  const cfg = db.settings.games.plinko;
+  const saved = { ...cfg };
+  Object.assign(cfg, { enabled: true, rows: '12', risk: 'medium', returnPercent: 97, minBet: 10, maxBet: 0, maxBalls: 5, cooldownSeconds: 0, announceFrom: 0 });
+  const sent = [];
+  const realOverlay = bot.overlay;
+  bot.overlay = (type, data) => (type === 'plinko' && sent.push(data), realOverlay.call(bot, type, data));
+  const wait = () => new Promise((r) => setTimeout(r, 120));
+  try {
+    bot.addPoints('plk', 1000, 'Plk');
+    const start = bot.points('plk');
+    await chat('Plk', '!plinko 100 3');
+    await wait();
+    const d = sent.at(-1);
+    assert.equal(d.user, 'Plk');
+    assert.equal(d.per, 100);
+    assert.equal(d.rows, 12);
+    assert.equal(d.balls.length, 3);
+    assert.match(d.color, /^#[0-9a-f]{6}$/);
+    for (const b of d.balls) {
+      assert.equal(b.path.length, 12);
+      assert.equal(b.slot, b.path.reduce((s, x) => s + x, 0));
+      assert.equal(b.mult, d.multipliers[b.slot]);
+      assert.equal(b.win, Math.round(100 * b.mult));
+    }
+    const paid = d.balls.reduce((s, b) => s + b.win, 0);
+    assert.equal(bot.points('plk'), start - 300 + paid);
+    assert.match(said.join(' '), new RegExp(`3 balls × 100: ${d.balls.map((b) => `${b.mult}×`).join(' ')} → ${paid.toLocaleString('en-US')} points back`));
+    const pl = viewerPnl(db.users.plk).games.find((g) => g.game === 'plinko');
+    assert.deepEqual([pl.plays, pl.staked, pl.paid], [1, 300, paid]);
+
+    // too many balls are capped at the max; more than you can afford is refused
+    await chat('Plk', '!plinko 10 50');
+    await wait();
+    assert.equal(sent.at(-1).balls.length, 5);
+    const bal = bot.points('plk');
+    assert.match(await chat('Plk', `!plinko ${bal} 2`), /2 balls × [\d,]+ = [\d,]+ points, but you only have/);
+    assert.match(await chat('Plk', '!plinko 5'), /minimum bet is 10 points per ball/);
+    assert.match(await chat('Plk', '!plinko 100 zero'), /usage: !plinko/);
+    assert.match(await chat('Plk', '!plinko'), /drop balls with !plinko <amount> <balls>/);
+
+    // "all" is the total, shared between the balls
+    const before = sent.length;
+    const all = bot.points('plk');
+    await chat('Plk', '!plinko all 4');
+    await wait();
+    assert.equal(sent.length, before + 1);
+    assert.equal(sent.at(-1).per, Math.floor(all / 4));
+
+    // the settings preview
+    const board = await bot.runAction('plinko:board', { rows: '8', risk: 'high' });
+    assert.equal(board.multipliers.length, 9);
+  } finally {
+    bot.overlay = realOverlay;
+    Object.assign(cfg, saved);
+    Object.assign(PLINKO_TIMING, savedT);
+  }
+});
+
 test('gambling PnL: every game records what went in and what came back', async () => {
   await bot.runAction('pnl:reset');
   const { viewerPnl } = await import('../src/main/bot/pnl.js');

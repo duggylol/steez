@@ -184,6 +184,7 @@ async function startCore() {
     { id: 'effects', module: 'Bot', name: 'Shop effects', path: '/overlay/alerts?widgets=effects', description: 'Confetti, emote rain, TTS, shake, spotlight.', width: 1920, height: 1080 },
     { id: 'boss', module: 'Bot', name: 'Raid boss', path: '/overlay/alerts?widgets=boss', description: 'Boss HP bar and top attackers.', width: 1920, height: 1080 },
     { id: 'jackpot', module: 'Bot', name: 'Jackpot', path: '/overlay/jackpot', description: 'The !jackpot reel: slides up when a round starts, rolls to the winner, slides away when it’s done.', width: 1280, height: 400 },
+    { id: 'plinko', module: 'Bot', name: 'Plinko', path: '/overlay/plinko', description: 'The !plinko board: slides up when someone drops balls, each viewer’s balls in their own color, slides away when it’s quiet.', width: 1000, height: 1000 },
     { id: 'poll', module: 'Bot', name: 'Polls & bets', path: '/overlay/alerts?widgets=poll,bets', description: 'Live poll and betting pools.', width: 1920, height: 1080 },
   );
 

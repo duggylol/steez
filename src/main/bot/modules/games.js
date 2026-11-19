@@ -1,10 +1,11 @@
-// Points games: gamble, slots, duel, heist, roulette, fishing, daily check-in.
+// Points games: gamble, slots, duel, heist, jackpot, plinko, roulette, fishing, daily check-in.
 import { db, save, findUser, getUser, bumpStat } from '../store.js';
 import { parseAmount, randInt, pick, weightedPick, fmtNum, normLogin, todayKey, fmtDuration } from '../util.js';
 import { keep, restore, resumeAt } from '../session.js';
 import { castFish, cleanTiers } from '../fishing.js';
 import { pickWinner, chanceOf } from '../jackpot.js';
 import { recordPlay, viewerPnl, channelPnl, resetPnl } from '../pnl.js';
+import { plinkoBoard, dropBall, ballColor, PLINKO_TIMING } from '../plinko.js';
 
 export function init(bot) {
   const G = () => db.settings.games;
@@ -345,18 +346,106 @@ export function init(bot) {
     },
   });
 
+  // ─── Plinko ─────────────────────────────────────────────────
+  // !plinko <amount> [balls]: every ball costs <amount> and lands on a multiplier. Where each ball
+  // lands is decided here and paid at once; the overlay just plays the paths, and the chat reply
+  // waits until the last ball has landed on it.
+  const onBoard = new Map(); // login → { color, until }: players whose balls are still on the overlay
+  function plinkoColorFor(user) {
+    const now = Date.now();
+    for (const [k, v] of onBoard) if (v.until < now) onBoard.delete(k);
+    const mine = onBoard.get(user.login);
+    if (mine) return mine.color;
+    return ballColor(user.login, user.color, [...onBoard.values()].map((v) => v.color));
+  }
+  const fmtMult = (m) => `${m}×`;
+  let plinkoSeq = 0;
+  bot.command('plinko', {
+    description: 'Drop balls down the Plinko board. Each ball lands on a multiplier of its bet',
+    usage: '!plinko <amount per ball> [balls]',
+    get userCooldown() {
+      return G().plinko.cooldownSeconds;
+    },
+    handler: (ctx, [amt, ballsArg]) => {
+      const cfg = G().plinko;
+      if (!cfg.enabled) return false;
+      const board = plinkoBoard(cfg);
+      const maxBalls = Math.max(1, Math.floor(cfg.maxBalls || 1));
+      const ms = board.multipliers;
+      if (!amt) {
+        return bot.reply(ctx, `drop balls with !plinko <amount> <balls> (up to ${maxBalls} balls, each costs <amount>). Slots pay ${fmtMult(Math.min(...ms))} to ${fmtMult(Math.max(...ms))}.`), false;
+      }
+      let balls = ballsArg == null ? 1 : Math.floor(Number(ballsArg));
+      if (!(balls >= 1)) return bot.reply(ctx, 'usage: !plinko <amount per ball> <balls>, like !plinko 100 5'), false;
+      balls = Math.min(balls, maxBalls);
+      const bal = bot.points(ctx.user.login);
+      // all / half / 50% mean the total, shared between the balls
+      const total = /^(all|allin|max|half)$|%$/i.test(amt);
+      let per = total ? Math.floor(parseAmount(amt, bal) / balls) : parseAmount(amt, bal);
+      if (!(per > 0) && !total) return bot.reply(ctx, 'usage: !plinko <amount per ball> <balls>, like !plinko 100 5'), false;
+      if (cfg.maxBet > 0) per = Math.min(per, cfg.maxBet);
+      if (!(per >= (cfg.minBet || 1))) return bot.reply(ctx, `minimum bet is ${bot.fmtPoints(cfg.minBet || 1)} per ball.`), false;
+      const cost = per * balls;
+      if (cost > bal) {
+        return bot.reply(ctx, balls > 1 ? `${balls} balls × ${fmtNum(per)} = ${bot.fmtPoints(cost)}, but you only have ${bot.fmtPoints(bal)}.` : `you only have ${bot.fmtPoints(bal)}.`), false;
+      }
+
+      const drops = Array.from({ length: balls }, () => {
+        const { path, slot } = dropBall(board.rows);
+        const mult = ms[slot];
+        return { path, slot, mult, win: Math.round(per * mult) };
+      });
+      const paid = drops.reduce((s, d) => s + d.win, 0);
+      bot.addPoints(ctx.user.login, paid - cost);
+      recordPlay(ctx.user.login, ctx.user.display, 'plinko', cost, paid);
+      const best = Math.max(...drops.map((d) => d.mult));
+
+      const T = PLINKO_TIMING;
+      const fallMs = T.revealMs + (balls - 1) * T.staggerMs + (board.rows + 2) * T.stepMs + T.settleMs;
+      const color = plinkoColorFor(ctx.user);
+      onBoard.set(ctx.user.login, { color, until: Date.now() + fallMs + 5000 });
+      bot.overlay('plinko', {
+        id: `${Date.now()}-${++plinkoSeq}`,
+        user: ctx.user.display,
+        login: ctx.user.login,
+        color,
+        per,
+        rows: board.rows,
+        multipliers: ms,
+        balls: drops.map(({ path, slot, mult, win }) => ({ path, slot, mult, win })),
+        staggerMs: T.staggerMs,
+        stepMs: T.stepMs,
+        revealMs: T.revealMs,
+        hideAfterMs: Math.max(5, cfg.hideAfterSeconds || 30) * 1000,
+        currency: bot.currency,
+      });
+
+      const net = paid - cost;
+      const list = balls <= 12 ? drops.map((d) => fmtMult(d.mult)).join(' ') : `best ${fmtMult(best)}`;
+      const head = balls > 1 ? `${balls} balls × ${fmtNum(per)}: ` : '';
+      const tail = net > 0 ? `${best >= 10 ? ' 🔥' : ' 🎉'}` : net < 0 ? ' 💸' : '';
+      setTimeout(() => {
+        bot.reply(ctx, `🔻 ${head}${list} → ${bot.fmtPoints(paid)} back (${signed(net)})${tail} Now: ${fmtNum(bot.points(ctx.user.login))}.`);
+        if (best >= (cfg.announceFrom || Infinity)) bot.say(`🔻 ${ctx.user.display} hit ${fmtMult(best)} on Plinko for ${bot.fmtPoints(Math.round(per * best))}! 🔥`);
+      }, fallMs);
+    },
+  });
+
+  // The board for the settings page preview (unsaved values from the form, or the saved ones).
+  bot.action('plinko:board', (a) => plinkoBoard({ ...G().plinko, ...(a || {}) }));
+
   // ─── Gambling PnL ───────────────────────────────────────────
   const signed = (n) => (n > 0 ? `+${fmtNum(n)}` : n < 0 ? `-${fmtNum(-n)}` : '0');
   const pnlSkip = () => new Set([...(db.settings.general.ignoredUsers || []).map(normLogin), bot.state.botLogin, bot.relay?.info?.login, bot.state.channel]);
   bot.command('pnl', {
-    description: 'Your gambling profit & loss (gamble, slots, duel, heist, jackpot, bets)',
+    description: 'Your gambling profit & loss (gamble, slots, duel, heist, jackpot, plinko, bets)',
     usage: '!pnl [user|top]',
     aliases: ['profit', 'gamblestats'],
     userCooldown: 10,
     handler: (ctx, [arg]) => {
       if (/^(top|lb|leaderboard)$/i.test(arg || '')) {
         const r = channelPnl({ skip: pnlSkip(), top: 3 });
-        if (!r.plays) return bot.say('📊 No gambling yet. Try !gamble, !slots or !jackpot');
+        if (!r.plays) return bot.say('📊 No gambling yet. Try !gamble, !slots, !plinko or !jackpot');
         const list = (xs) => xs.map((p, i) => `${i + 1}. ${p.user} ${signed(p.net)}`).join(' | ') || 'nobody';
         return bot.say(`📈 Most up: ${list(r.winners)} · 📉 Most down: ${list(r.losers)}`);
       }

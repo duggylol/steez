@@ -150,6 +150,7 @@ export function createBotRouter({ key, openUrl }) {
   r.get('/overlay/alerts', (req, res) => res.sendFile(path.join(PUBLIC, 'overlay.html')));
   r.get('/overlay/jackpot', (req, res) => res.sendFile(path.join(PUBLIC, 'jackpot.html')));
   r.get('/overlay/jackpot/state', (req, res) => res.json(bot.jackpotState?.() || null));
+  r.get('/overlay/plinko', (req, res) => res.sendFile(path.join(PUBLIC, 'plinko.html')));
   r.get('/api/public/commands', (req, res) => {
     res.json({
       prefix: bot.prefix,

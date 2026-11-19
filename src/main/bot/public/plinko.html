@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Plinko</title>
+  <!--
+    The !plinko board for OBS (browser source, 1000 × 1000, transparent).
+    Steez decides where every ball lands; this page plays each ball's path down the pegs.
+    Every viewer's balls are their own color, and the legend shows who's who and how they're doing.
+    It slides up when balls are dropped and back down once the board has been quiet for a while.
+    ?demo=1 drops sample balls on a loop (silent). ?sound=0 mutes it.
+  -->
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; color: #f4f4f6; }
+    #card {
+      position: absolute; inset: 20px;
+      display: flex; flex-direction: column;
+      background: linear-gradient(180deg, rgba(28, 27, 36, .96), rgba(16, 16, 22, .97));
+      border: 1px solid rgba(255, 255, 255, .09); border-radius: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06);
+      padding: 16px 22px 16px;
+      /* hidden: below the bottom edge */
+      transform: translateY(calc(100% + 60px)); opacity: 0;
+      transition: transform .7s cubic-bezier(.65, 0, .85, .25), opacity .45s ease .25s;
+    }
+    #card.show { transform: translateY(0); opacity: 1; transition: transform .85s cubic-bezier(.16, 1, .3, 1), opacity .35s ease; }
+    .top { display: flex; align-items: center; gap: 16px; flex: none; }
+    .tag { font-size: 15px; font-weight: 800; letter-spacing: .18em; color: #ffd36b; text-transform: uppercase; }
+    .grow { flex: 1; }
+    .pill { font-size: 15px; font-weight: 700; padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .1); color: #e8e8ee; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pill .cmd { color: #ffd36b; font-weight: 800; }
+    .pill.hot { background: rgba(255, 92, 138, .16); border-color: rgba(255, 92, 138, .45); color: #ffd0dd; }
+    .board { position: relative; flex: 1; min-height: 0; margin-top: 10px; }
+    .board canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .legend { display: flex; gap: 8px; margin-top: 10px; overflow: hidden; height: 34px; flex: none; justify-content: center; }
+    .chip { display: flex; align-items: center; gap: 8px; flex: none; padding: 5px 12px 5px 6px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); font-size: 15px; font-weight: 650; white-space: nowrap; transition: opacity .3s; }
+    .chip i { width: 20px; height: 20px; border-radius: 50%; flex: none; box-shadow: inset -3px -4px 6px rgba(0, 0, 0, .35), inset 2px 2px 4px rgba(255, 255, 255, .45); }
+    .chip em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .chip em.up { color: #5ee6a8; }
+    .chip em.down { color: #ff8fa8; }
+    .chip em.even { color: #a9a8b8; }
+    .chip small { color: #a9a8b8; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div class="top">
+      <div class="tag">🔻 Plinko</div>
+      <div class="grow"></div>
+      <div class="pill" id="pill">Drop balls with <span class="cmd">!plinko &lt;amount&gt; &lt;balls&gt;</span></div>
+    </div>
+    <div class="board"><canvas id="board"></canvas></div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const DEMO = !!params.get('demo');
+    const SOUND = params.get('sound') !== '0' && !DEMO;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const fmt = (n) => Math.round(n).toLocaleString();
+    const signed = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '±0');
+    const FONT = '"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif';
+
+    // ── State ──
+    let board = { rows: 12, multipliers: [36, 12, 4.6, 1.9, 0.94, 0.54, 0.4, 0.54, 0.94, 1.9, 4.6, 12, 36] };
+    let balls = [];              // every ball on the board
+    const pegFlash = new Map();  // "row,peg" → { t, color }
+    let slotHits = [];           // per slot: { t, color }
+    let floats = [];             // landing labels drifting up
+    let parts = [];              // confetti
+    const players = new Map();   // login → { user, color, balls, staked, paid, at }
+    let shown = false, hideTimer = null, hideAfterMs = 30000;
+    let stepMs = 170;
+
+    const card = $('card');
+    const show = () => { clearTimeout(hideTimer); hideTimer = null; if (!shown) { shown = true; card.classList.add('show'); } };
+    const hide = () => {
+      shown = false;
+      card.classList.remove('show');
+      setTimeout(() => { if (!shown) { players.clear(); drawLegend(); } }, 900);
+    };
+
+    // ── Sound ──
+    let actx = null, lastTick = 0;
+    function tone(freq, dur, vol, type = 'sine', delay = 0) {
+      if (!SOUND) return;
+      try {
+        actx ||= new AudioContext();
+        const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
+      } catch {}
+    }
+    const tick = (now) => { if (now - lastTick > 35) { lastTick = now; tone(1900 + Math.random() * 500, 0.035, 0.035, 'triangle'); } };
+    const land = (mult) => {
+      const f = 330 * Math.pow(2, Math.min(2.5, Math.log2(mult + 0.5) / 2));
+      tone(f, 0.22, 0.09, 'triangle');
+      if (mult >= 10) [1, 1.25, 1.5, 2].forEach((m, i) => tone(f * m, 0.5, 0.08, 'triangle', 0.08 * (i + 1)));
+    };
+
+    // ── Board geometry ──
+    const cv = $('board'), cx = cv.getContext('2d');
+    let W = 0, H = 0;
+    function fit() {
+      const DPR = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
+      W = r.width; H = r.height;
+      cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+      cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    addEventListener('resize', fit); fit();
+
+    // Row r has r + 3 pegs. The ball hits the middle peg of row 0, then moves half a gap left or
+    // right per row, so after all rows it sits over slot (number of rights).
+    function geo() {
+      const n = board.rows;
+      const s = Math.min(W / (n + 1.6), H / (2.5 + 0.87 * (n - 1)));
+      const rowH = s * 0.87;
+      const used = s * (2.5 + 0.87 * (n - 1));
+      const top = (H - used) / 2 + s * 0.85;
+      const pegR = Math.max(2.5, s * 0.1), ballR = Math.max(5, s * 0.21);
+      const slotY = top + (n - 1) * rowH + rowH * 0.85, slotH = s * 0.72;
+      return { n, s, rowH, top, pegR, ballR, slotY, slotH, mid: W / 2 };
+    }
+    const pegX = (g, r, k) => g.mid + (k - (r + 2) / 2) * g.s;
+    const pegY = (g, r) => g.top + r * g.rowH;
+    const contactY = (g, r) => pegY(g, r) - g.pegR - g.ballR * 0.9;
+    const slotX = (g, j) => g.mid + (j - g.n / 2) * g.s;
+    const slotColor = (k, n, l = 58) => `hsl(${(48 - 56 * (Math.abs(k - n / 2) / (n / 2)) + 360) % 360} 95% ${l}%)`;
+
+    // Where a ball is right now: null before it drops, { landed } once it's in its slot.
+    function ballAt(g, b, now) {
+      const el = now - b.start;
+      if (el < 0) return null;
+      const spawn = stepMs * 1.5;
+      const rights = (i) => { let c = 0; for (let j = 0; j < i; j++) c += b.path[j]; return c; };
+      const X = (i) => g.mid + (rights(i) - i / 2) * g.s;
+      if (el < spawn) {
+        const t = el / spawn, y0 = g.top - g.s * 0.95;
+        return { x: X(0), y: y0 + (contactY(g, 0) - y0) * t * t, seg: -1 };
+      }
+      const f = (el - spawn) / stepMs, i = Math.floor(f), t = f - i;
+      if (i >= g.n) return { x: X(g.n), y: g.slotY + g.slotH * 0.45, seg: g.n, landed: true };
+      const x0 = X(i), x1 = X(i + 1);
+      const y0 = contactY(g, i), y1 = i === g.n - 1 ? g.slotY + g.slotH * 0.45 : contactY(g, i + 1);
+      const x = x0 + (x1 - x0) * (1 - (1 - t) * (1 - t));
+      const y = y0 + (y1 - y0) * t * t - b.bounce[i] * g.rowH * Math.sin(Math.PI * t) * (1 - t);
+      return { x, y, seg: i, peg: rights(i) + 1 };
+    }
+
+    // ── Drops from Steez ──
+    function apply(d) {
+      if (!d || !Array.isArray(d.balls)) return;
+      if (d.rows !== board.rows || String(d.multipliers) !== String(board.multipliers)) {
+        board = { rows: d.rows, multipliers: d.multipliers };
+        balls = []; slotHits = []; pegFlash.clear();
+      }
+      stepMs = d.stepMs || stepMs;
+      hideAfterMs = d.hideAfterMs || hideAfterMs;
+      const now = performance.now();
+      const delay = shown ? 120 : d.revealMs || 700;
+      show();
+      const p = players.get(d.login) || { user: d.user, color: d.color, balls: 0, staked: 0, paid: 0 };
+      Object.assign(p, { user: d.user, color: d.color, at: now });
+      p.balls += d.balls.length;
+      players.set(d.login, p);
+      d.balls.forEach((b, i) => {
+        balls.push({
+          ...b, login: d.login, user: d.user, color: d.color, per: d.per,
+          start: now + delay + i * (d.staggerMs || 280),
+          bounce: b.path.map(() => 0.42 + Math.random() * 0.22),
+          label: i === 0, seg: -2, landedAt: 0,
+        });
+      });
+      drawLegend();
+    }
+
+    // ── Legend + pill ──
+    function drawLegend() {
+      const list = [...players.values()].sort((a, b) => b.at - a.at);
+      const html = list.slice(0, 5).map((p) => {
+        const net = p.paid - p.staked;
+        const cls = !p.staked ? 'even' : net > 0 ? 'up' : net < 0 ? 'down' : 'even';
+        return `<div class="chip"><i style="background:${p.color}"></i>${esc(p.user)} <small>${p.balls} ball${p.balls === 1 ? '' : 's'}</small> <em class="${cls}">${p.staked ? signed(net) : '…'}</em></div>`;
+      }).join('') + (list.length > 5 ? `<div class="chip"><small>+${list.length - 5} more</small></div>` : '');
+      if ($('legend').innerHTML !== html) $('legend').innerHTML = html;
+    }
+    function drawPill() {
+      const falling = balls.filter((b) => !b.landedAt).length;
+      const html = falling ? `${falling} ball${falling === 1 ? '' : 's'} dropping` : 'Drop balls with <span class="cmd">!plinko &lt;amount&gt; &lt;balls&gt;</span>';
+      const pill = $('pill');
+      if (pill.innerHTML !== html) pill.innerHTML = html;
+      const cls = falling ? 'pill hot' : 'pill';
+      if (pill.className !== cls) pill.className = cls;
+    }
+
+    function confetti(x, y, color) {
+      const cols = [color, '#ffd36b', '#ffffff', color];
+      for (let i = 0; i < 60; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, v = 4 + Math.random() * 7;
+        parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 3 + Math.random() * 4, c: cols[i % cols.length], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.4, life: 1 });
+      }
+    }
+
+    function roundRect(x, y, w, h, r) {
+      cx.beginPath();
+      cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath();
+    }
+
+    // ── Animation loop ──
+    (function loop() {
+      const now = performance.now();
+      if (W < 2 || H < 2) fit();
+      const g = geo();
+      cx.clearRect(0, 0, W, H);
+
+      // move the balls, flashing pegs and filling slots as they go
+      let landedNow = false;
+      const pos = new Map();
+      for (const b of balls) {
+        const p = ballAt(g, b, now);
+        if (!p) continue;
+        pos.set(b, p);
+        if (p.seg > b.seg) {
+          if (p.seg >= 0 && p.seg < g.n) { pegFlash.set(`${p.seg},${p.peg}`, { t: now, color: b.color }); tick(now); }
+          if (p.landed && !b.landedAt) {
+            b.landedAt = now;
+            landedNow = true;
+            slotHits[b.slot] = { t: now, color: b.color };
+            // only wins get a label, so a pile of small losses doesn't bury the board
+            if (b.mult >= 1) floats.push({ x: p.x, y: g.slotY - 6, text: `${b.mult}×`, sub: `+${fmt(b.win)}`, color: b.color, t: now, big: b.mult >= 10 });
+            const pl = players.get(b.login);
+            if (pl) { pl.staked += b.per; pl.paid += b.win; }
+            land(b.mult);
+            if (b.mult >= 10) confetti(p.x, g.slotY, b.color);
+          }
+          b.seg = p.seg;
+        }
+      }
+      if (landedNow) drawLegend();
+      balls = balls.filter((b) => !b.landedAt || now - b.landedAt < 350);
+      if (!balls.length && shown && !hideTimer && players.size) {
+        hideTimer = setTimeout(() => { hideTimer = null; if (!balls.length) hide(); }, DEMO ? 2500 : hideAfterMs);
+      } else if (balls.length && hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      drawPill();
+
+      // pegs
+      for (let r = 0; r < g.n; r++) {
+        for (let k = 0; k < r + 3; k++) {
+          const x = pegX(g, r, k), y = pegY(g, r);
+          const f = pegFlash.get(`${r},${k}`);
+          const a = f ? Math.max(0, 1 - (now - f.t) / 320) : 0;
+          if (f && !a) pegFlash.delete(`${r},${k}`);
+          if (a) {
+            // a thin ring in the ball's color that grows and fades
+            cx.save(); cx.globalAlpha = a * 0.9; cx.strokeStyle = f.color; cx.lineWidth = 2; cx.shadowColor = f.color; cx.shadowBlur = 10;
+            cx.beginPath(); cx.arc(x, y, g.pegR + 2 + (1 - a) * g.pegR * 2.2, 0, Math.PI * 2); cx.stroke(); cx.restore();
+          }
+          cx.fillStyle = a ? f.color : 'rgba(235, 235, 245, .82)';
+          cx.beginPath(); cx.arc(x, y, g.pegR, 0, Math.PI * 2); cx.fill();
+        }
+      }
+
+      // slots
+      const sw = g.s * 0.9, fs = Math.max(9, Math.min(g.slotH * 0.42, (sw - 6) / 3.2));
+      cx.font = `800 ${fs}px ${FONT}`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      board.multipliers.forEach((m, j) => {
+        const hit = slotHits[j], a = hit ? Math.max(0, 1 - (now - hit.t) / 420) : 0;
+        const x = slotX(g, j) - sw / 2, y = g.slotY + Math.sin(a * Math.PI) * g.slotH * 0.22;
+        cx.save();
+        cx.shadowColor = 'rgba(0,0,0,.45)'; cx.shadowBlur = 8; cx.shadowOffsetY = 3;
+        roundRect(x, y, sw, g.slotH, Math.min(10, sw * 0.22));
+        cx.fillStyle = slotColor(j, g.n, 58 + a * 14); cx.fill();
+        cx.restore();
+        if (a) { cx.save(); cx.globalAlpha = a; cx.lineWidth = 3; cx.strokeStyle = hit.color; roundRect(x, y, sw, g.slotH, Math.min(10, sw * 0.22)); cx.stroke(); cx.restore(); }
+        cx.fillStyle = '#1a1020';
+        let label = `${m}×`;
+        if (cx.measureText(label).width > sw - 4) label = `${m}`;
+        cx.fillText(label, x + sw / 2, y + g.slotH / 2 + 1);
+      });
+
+      // balls (in flight)
+      for (const [b, p] of pos) {
+        if (b.landedAt && now - b.landedAt > 0) cx.globalAlpha = Math.max(0, 1 - (now - b.landedAt) / 350);
+        const r = g.ballR;
+        cx.save();
+        cx.shadowColor = b.color; cx.shadowBlur = r * 1.2;
+        const grad = cx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.4, r * 0.15, p.x, p.y, r);
+        grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.28, b.color); grad.addColorStop(1, b.color);
+        cx.fillStyle = grad;
+        cx.beginPath(); cx.arc(p.x, p.y, r, 0, Math.PI * 2); cx.fill();
+        cx.restore();
+        // the viewer's name rides along on their first ball for the top few rows
+        if (b.label && p.seg < 3) {
+          const la = p.seg < 1 ? 1 : Math.max(0, 1 - (now - b.start - stepMs * 1.5 - stepMs) / (stepMs * 2));
+          cx.save(); cx.globalAlpha *= la;
+          cx.font = `750 ${Math.max(12, r * 1.25)}px ${FONT}`; cx.textAlign = 'left'; cx.textBaseline = 'middle';
+          cx.lineWidth = 4; cx.strokeStyle = 'rgba(10,10,16,.85)'; cx.strokeText(b.user, p.x + r + 6, p.y);
+          cx.fillStyle = b.color; cx.fillText(b.user, p.x + r + 6, p.y);
+          cx.restore();
+        }
+        cx.globalAlpha = 1;
+      }
+
+      // landing labels
+      floats = floats.filter((f) => now - f.t < 1300);
+      for (const f of floats) {
+        const k = (now - f.t) / 1300;
+        cx.save();
+        cx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+        cx.textAlign = 'center'; cx.textBaseline = 'bottom';
+        const y = f.y - k * g.s * 1.4, size = Math.max(14, g.s * (f.big ? 0.62 : 0.42));
+        cx.font = `850 ${size}px ${FONT}`;
+        cx.lineWidth = 5; cx.strokeStyle = 'rgba(10,10,16,.85)'; cx.strokeText(f.text, f.x, y);
+        cx.fillStyle = f.color; cx.fillText(f.text, f.x, y);
+        if (f.sub) {
+          cx.font = `750 ${size * 0.62}px ${FONT}`;
+          cx.strokeText(f.sub, f.x, y - size);
+          cx.fillStyle = '#ffffff'; cx.fillText(f.sub, f.x, y - size);
+        }
+        cx.restore();
+      }
+
+      // confetti
+      parts = parts.filter((p) => p.life > 0 && p.y < H + 40);
+      for (const p of parts) {
+        p.vy += 0.32; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; p.life -= 0.012;
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.a); cx.globalAlpha = Math.min(1, p.life * 2); cx.fillStyle = p.c; cx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); cx.restore();
+      }
+      requestAnimationFrame(loop);
+    })();
+
+    // ── Connection ──
+    function connect() {
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      ws.onmessage = (ev) => {
+        const { type, data } = JSON.parse(ev.data);
+        if (type === 'plinko') apply(data);
+      };
+      ws.onclose = () => setTimeout(connect, 3000);
+    }
+
+    // ?demo=1: sample drops on a loop for the preview in Steez.
+    function demo() {
+      const people = [['NightOwl', '#7c8cff'], ['PixelPanda', '#ff6b9a'], ['Kappa_Kid', '#ffb547'], ['BigSpender', '#2fd39a'], ['LoyalViewer', '#38bdf8'], ['GG_Gamer', '#c084fc']];
+      let n = 0;
+      const run = () => {
+        const [user, color] = people[n++ % people.length];
+        const count = 1 + Math.floor(Math.random() * 6), per = [50, 100, 250, 500][Math.floor(Math.random() * 4)];
+        const balls = Array.from({ length: count }, () => {
+          const path = Array.from({ length: board.rows }, () => (Math.random() < 0.5 ? 0 : 1));
+          const slot = path.reduce((s, b) => s + b, 0), mult = board.multipliers[slot];
+          return { path, slot, mult, win: Math.round(per * mult) };
+        });
+        apply({ id: Date.now(), user, login: user.toLowerCase(), color, per, rows: board.rows, multipliers: board.multipliers, balls, staggerMs: 280, stepMs: 170, revealMs: 700, hideAfterMs: 2500 });
+        setTimeout(run, 1300 + Math.random() * 900);
+      };
+      run();
+    }
+    if (DEMO) demo();
+    else connect();
+  </script>
+</body>
+</html>

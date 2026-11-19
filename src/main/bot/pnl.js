@@ -2,7 +2,7 @@
 // kept per viewer and per game in db.users[login].pnl. Refunds and cancelled rounds aren't plays.
 import { db, getUser, save } from './store.js';
 
-export const PNL_GAMES = { gamble: 'Gamble', slots: 'Slots', duel: 'Duel', heist: 'Heist', jackpot: 'Jackpot', bets: 'Bets' };
+export const PNL_GAMES = { gamble: 'Gamble', slots: 'Slots', duel: 'Duel', heist: 'Heist', jackpot: 'Jackpot', plinko: 'Plinko', bets: 'Bets' };
 
 const blank = () => ({ plays: 0, wins: 0, staked: 0, paid: 0, best: 0, worst: 0 });
 

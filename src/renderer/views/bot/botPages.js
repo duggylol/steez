@@ -104,6 +104,13 @@ export const HELP = {
   'games.jackpot.spinSeconds': 'How long the reel rolls before the winner is announced.',
   'games.jackpot.hideAfterSeconds': 'The jackpot overlay slides away this long after a round ends.',
   'games.jackpot.cooldownSeconds': 'Wait between rounds (0 = a new round can start right away).',
+  'games.plinko.rows': 'More rows = more slots, bigger edge payouts and rarer edge hits.',
+  'games.plinko.risk': 'How steep the board is. Low: most balls get back close to their bet. High: most balls lose most of it, but the edges pay huge.',
+  'games.plinko.returnPercent': 'How much of every bet the board pays back on average. Under 100 = the house slowly wins; 100 = even; over 100 = chat slowly wins.',
+  'games.plinko.maxBet': 'The most one ball can be worth (0 = no limit).',
+  'games.plinko.maxBalls': 'The most balls one !plinko can drop. Each costs the amount.',
+  'games.plinko.announceFrom': 'Shout it to the whole chat when a ball lands on this multiplier or higher (0 = never).',
+  'games.plinko.hideAfterSeconds': 'The Plinko overlay slides away this long after the last ball lands.',
   'games.trivia.duringAdBreaks': 'Start a trivia round automatically when an ad break begins.',
   'overlay.ttsVoice': 'Name of a voice installed on this PC (leave empty for the default).',
   'shoutout.autoList': 'Streamers who get an automatic shoutout the first time they chat each stream (one per line).',
@@ -126,6 +133,12 @@ const SELECTS = {
     { value: 'easy', label: 'Easy only' },
     { value: 'medium', label: 'Medium only' },
     { value: 'hard', label: 'Hard only' },
+  ],
+  'games.plinko.rows': ['8', '9', '10', '11', '12', '13', '14', '15', '16'].map((n) => ({ value: n, label: `${n} rows` })),
+  'games.plinko.risk': [
+    { value: 'low', label: 'Low — steady, small swings' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High — mostly losses, rare huge wins' },
   ],
   'ai.effort': [
     { value: '', label: 'Model default' },
@@ -667,7 +680,7 @@ function pageGames(main, on) {
   const drawPnl = () =>
     api.action('pnl:report').then((r) => {
       if (!r) return;
-      if (!r.plays) return put(pnlBox, h('p', { class: 'muted small' }, 'No gambling yet. Every !gamble, !slots, !duel, !heist, !jackpot and !bet result is counted from now on. Viewers can check theirs with !pnl.'));
+      if (!r.plays) return put(pnlBox, h('p', { class: 'muted small' }, 'No gambling yet. Every !gamble, !slots, !duel, !heist, !jackpot, !plinko and !bet result is counted from now on. Viewers can check theirs with !pnl.'));
       const stat = (v, l, style = '') => h('div', { class: 'stat' }, h('b', { style }, v), h('span', {}, l));
       const people = (title, list) =>
         h('div', { class: 'sub-group', style: 'margin:0' },
@@ -699,6 +712,22 @@ function pageGames(main, on) {
       );
     }).catch(() => {});
   drawPnl();
+  // Plinko: the board the current settings make, with its average return
+  const plinkoBox = h('div', { class: 'muted' }, 'Loading…');
+  const slotColor = (k, rows) => `hsl(${(48 - 56 * (Math.abs(k - rows / 2) / (rows / 2)) + 360) % 360} 95% 58%)`;
+  const drawPlinko = (opts) =>
+    api.action('plinko:board', opts).then((b) => {
+      if (!b) return;
+      const rtp = Math.round(b.rtp * 1000) / 10;
+      const edge = Math.round(1 / (b.chances[0] * 2)); // either end
+      put(plinkoBox,
+        h('div', { style: `display:grid;grid-template-columns:repeat(${b.multipliers.length},minmax(0,1fr));gap:4px` },
+          b.multipliers.map((m, k) => h('div', { title: `${(b.chances[k] * 100).toFixed(k === 0 || k === b.rows ? 3 : 1)}% of balls`, style: `background:${slotColor(k, b.rows)};color:#1a1020;border-radius:7px;padding:7px 0;text-align:center;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden` }, `${m}×`))),
+        h('p', { class: 'muted small', style: 'margin:10px 0 0' },
+          `Pays back ${rtp}% of every bet on average (${rtp < 100 ? `the house keeps ${Math.round((100 - rtp) * 10) / 10}%` : rtp > 100 ? `chat comes out ${Math.round((rtp - 100) * 10) / 10}% ahead` : 'even'}). A ball lands on an edge slot about 1 in ${edge.toLocaleString()} drops.`),
+      );
+    }).catch(() => {});
+  const gameForm = settingsForm('games', { title: 'Game settings', keys: Object.keys(S.settings.games).filter((k) => k !== 'secretWord'), onSaved: () => drawPlinko() });
   const sw = h('input', { placeholder: 'secret word', value: S.settings.games.secretWord.word });
   const swr = h('input', { type: 'number', value: S.settings.games.secretWord.reward, style: 'max-width:120px' });
   add(main, 
@@ -708,15 +737,32 @@ function pageGames(main, on) {
       card('Secret word', h('p', { class: 'muted small' }, 'First viewer to say this word in chat wins. Nobody sees it but you.'), h('div', { class: 'row' }, sw, swr, btn('Set', () => api.action('secretword:set', { word: sw.value, reward: swr.value }).then(() => toast(sw.value ? 'Secret word armed 🤫' : 'Cleared')), 'primary'))),
     ),
     card('Gambling PnL',
-      h('p', { class: 'muted small', style: 'margin-top:0' }, 'Profit & loss from every points game: gamble, slots, duels, heists, the jackpot and !bet. Viewers see theirs with !pnl, and !pnl top shows who’s most up and down.'),
+      h('p', { class: 'muted small', style: 'margin-top:0' }, 'Profit & loss from every points game: gamble, slots, duels, heists, the jackpot, plinko and !bet. Viewers see theirs with !pnl, and !pnl top shows who’s most up and down.'),
       pnlBox,
       h('div', { class: 'row', style: 'margin-top:12px' },
         btn('Refresh', drawPnl, 'sm'),
         btn('Reset everyone’s PnL', () => confirm('Start everyone’s gambling PnL over from zero? Points are not touched.') && api.action('pnl:reset').then(() => (toast('PnL reset'), drawPnl())), 'sm danger'),
       ),
     ),
-    settingsForm('games', { title: 'Game settings', keys: Object.keys(S.settings.games).filter((k) => k !== 'secretWord') }),
+    card('Plinko board',
+      h('p', { class: 'muted small', style: 'margin-top:0', 'data-path': 'games.plinkoBoard' }, 'Viewers type !plinko <amount> <balls>: every ball costs the amount and lands on a slot that multiplies it. Each viewer’s balls are their own color on the Plinko overlay. Change rows, risk and return in Game settings below.'),
+      plinkoBox,
+    ),
+    gameForm,
   );
+  const readPlinko = () => {
+    const v = (k) => gameForm.querySelector(`[data-path="games.plinko.${k}"] select, [data-path="games.plinko.${k}"] input`)?.value;
+    return { rows: v('rows'), risk: v('risk'), returnPercent: Number(v('returnPercent')) };
+  };
+  let plinkoT;
+  const livePlinko = (e) => {
+    if (!e.target.closest('[data-path^="games.plinko."]')) return;
+    clearTimeout(plinkoT);
+    plinkoT = setTimeout(() => drawPlinko(readPlinko()), 120);
+  };
+  gameForm.addEventListener('input', livePlinko);
+  gameForm.addEventListener('change', livePlinko);
+  drawPlinko();
 }
 
 // Giveaways
