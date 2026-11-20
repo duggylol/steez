@@ -55,6 +55,17 @@ fs.writeFileSync(
 );
 console.log(`Built ${path.relative(root, out)} (API → ${relay}/casino/api)`);
 
+// --redirect https://steezgames.xyz: replace the site with permanent redirects to that address
+// (path kept), so links shared while the casino lived on Vercel keep working.
+const to = process.argv[process.argv.indexOf('--redirect') + 1];
+if (process.argv.includes('--redirect')) {
+  if (!/^https:\/\/[^\s/]+$/.test(to || '')) throw new Error('--redirect needs an https:// address with no path');
+  for (const f of fs.readdirSync(out)) if (f !== '.vercel') fs.rmSync(path.join(out, f), { recursive: true, force: true });
+  fs.writeFileSync(path.join(out, 'index.html'), `<!doctype html><meta http-equiv="refresh" content="0;url=${to}"><a href="${to}">${to}</a>`);
+  fs.writeFileSync(path.join(out, 'vercel.json'), JSON.stringify({ redirects: [{ source: '/:path*', destination: `${to}/:path*`, permanent: true }] }, null, 2));
+  console.log(`Vercel site now redirects to ${to}`);
+}
+
 if (process.argv.includes('--deploy')) {
   execSync('npx --yes vercel@latest deploy --prod --yes', { cwd: out, stdio: 'inherit' });
 }
