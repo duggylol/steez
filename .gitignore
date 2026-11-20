@@ -15,3 +15,6 @@ native/chest-tracker/out/
 
 # Cloudflare wrangler cache
 relay/.wrangler/
+
+# Built by npm run casino:vercel (the casino site packaged for Vercel)
+hosted/steez-casino/

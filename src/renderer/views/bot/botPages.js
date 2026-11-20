@@ -64,6 +64,14 @@ export const HELP = {
   'general.regulars': 'One username per line — these users get the "regular" level.',
   'general.ignoredUsers': 'Other bots to ignore (no points, no commands).',
   'modPanel.enabled': 'Lets your mods use the web Mod Panel while Steez is open.',
+  'casino.enabled': 'Opens your casino website while Steez is running. !casino posts the link in chat.',
+  'casino.title': 'Name at the top of the site. Leave empty for "<your name>’s Casino".',
+  'casino.returnPercent': 'What the games pay back on average (80–100). 97 means the house keeps about 3%. Roulette and blackjack use normal table odds.',
+  'casino.minBet': 'Smallest bet on any game.',
+  'casino.maxBet': 'Biggest bet on any game. 0 = no limit.',
+  'casino.feedFrom': 'Wins this many times the bet or more go on the site’s Big wins list.',
+  'casino.announceFrom': 'Wins this many times the bet or more are announced in chat. 0 = never.',
+  'casino.games': 'Untick a game to close it. Blackjack, roulette, baccarat and video poker use normal table odds; the rest pay back the return above.',
   'modPanel.points': 'Give and take loyalty points from viewers.',
   'modPanel.moderation': 'Shield mode and the automatic moderation log.',
   'modPanel.songs': 'Skip, pause, resume and clear song requests.',
@@ -1020,6 +1028,59 @@ function pageModPanel(main, on) {
   );
 }
 
+function pageCasino(main, on) {
+  add(main, head('Web Casino', 'Viewers play casino games with their points on a website. They log in with Twitch. Points can’t be bought or cashed out.'));
+  const st = h('div');
+  const statsBox = h('div', { class: 'muted' }, 'Loading…');
+  const fmtN = (n) => Number(n || 0).toLocaleString();
+  const draw = async () => {
+    const [c, link] = await Promise.all([api.action('casino:status'), api.action('modpanel:status')]);
+    const live = c.enabled && link.state === 'online';
+    const tone = live ? 'good' : c.enabled && link.state === 'error' ? 'bad' : '';
+    const text = !c.enabled ? 'Turned off' : live ? 'Open: viewers can play' : link.state === 'connecting' ? 'Connecting…' : 'Closed: not connected';
+    put(st,
+      h('div', { class: 'row' }, h('span', { class: `pill ${tone}` }, text), c.enabled && !live && link.detail ? h('span', { class: 'faint small grow' }, link.detail) : null, c.enabled && !live ? btn('Reconnect', async () => (await api.action('modpanel:reconnect'), setTimeout(draw, 1500)), 'sm') : null),
+      c.link
+        ? h('div', { style: 'margin-top:14px' },
+            h('div', { class: 'faint small', style: 'margin-bottom:6px' }, 'Your casino. Viewers can also type !casino in chat to get it.'),
+            h('div', { class: 'row' }, h('code', {}, c.link), btn('Copy link', () => copy(c.link), 'sm primary'), btn('Open', () => window.steez.open(c.link), 'sm')))
+        : h('div', { class: 'faint', style: 'margin-top:10px' }, c.base ? 'Connect your Twitch channel in Settings to get your link.' : 'The casino needs the Steez relay, which isn’t available in this build.'),
+    );
+    put(setupUrl, c.base ? `${c.base}/auth` : 'Relay not configured');
+  };
+  const drawStats = () =>
+    api.action('casino:stats').then((r) => {
+      const played = r.games.filter((g) => g.plays);
+      if (!played.length) return put(statsBox, h('p', { class: 'muted small' }, 'Nobody has played yet.'));
+      const tot = (k) => played.reduce((s, g) => s + g[k], 0);
+      put(statsBox,
+        h('div', { style: 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px' },
+          h('div', { class: 'stat' }, h('b', {}, fmtN(tot('plays'))), h('span', {}, 'plays')),
+          h('div', { class: 'stat' }, h('b', {}, fmtN(tot('staked'))), h('span', {}, `${S.settings.loyalty.currencyName || 'points'} wagered`)),
+          h('div', { class: 'stat' }, h('b', {}, fmtN(tot('staked') - tot('paid'))), h('span', {}, 'kept by the house'))),
+        h('table', { style: 'margin-top:12px' },
+          h('tr', {}, ['Game', 'Plays', 'Players', 'Wagered', 'Paid out', 'Paid back'].map((t) => h('th', {}, t))),
+          played.sort((a, b) => b.staked - a.staked).map((g) => h('tr', {}, h('td', {}, g.name), h('td', {}, fmtN(g.plays)), h('td', {}, fmtN(g.players)), h('td', {}, fmtN(g.staked)), h('td', {}, fmtN(g.paid)), h('td', {}, `${g.staked ? ((g.paid / g.staked) * 100).toFixed(1) : 0}%`)))),
+        r.feed.length
+          ? h('div', { style: 'margin-top:12px' }, h('div', { class: 'sg-title' }, 'Big wins'), r.feed.slice(0, 8).map((w) => h('div', { class: 'row', style: 'justify-content:space-between;padding:3px 0' }, h('span', {}, `${w.user} · ${w.game}`), h('b', {}, `${w.mult}× (+${fmtN(w.payout - w.staked)})`))))
+          : null);
+    });
+  const setupUrl = h('code', {}, '…');
+  const setup = card('One-time setup (owner of the Steez Twitch app only)',
+    h('p', { class: 'muted', style: 'margin-top:0' }, 'Twitch has to allow the casino to log viewers in. In dev.twitch.tv → your Steez app → OAuth Redirect URLs, add:'),
+    h('div', { class: 'row' }, setupUrl, btn('Copy', () => copy(setupUrl.textContent), 'sm')),
+    h('p', { class: 'muted' }, 'Using your own domain? Point it at the relay worker in Cloudflare, set CASINO_HOST to it, and add https://<your domain>/auth here as well.'),
+    h('div', { class: 'help' }, 'Streamers using Steez don’t need to do this. Their casino uses the same site.'));
+  draw();
+  drawStats();
+  on.modPanel = () => draw();
+  add(main,
+    h('div', { class: 'grid2' },
+      h('div', {}, card('Status', st), settingsForm('casino', { title: 'Casino settings', onSaved: async () => (await api.action('modpanel:apply'), draw()) })),
+      h('div', {}, card('How it’s going', statsBox, h('div', { class: 'row', style: 'margin-top:10px' }, btn('Refresh', drawStats, 'sm'))), setup)),
+  );
+}
+
 // ─── Mounting ────────────────────────────────────────────────
 const PAGES = {
   overview: pageOverview,
@@ -1040,6 +1101,7 @@ const PAGES = {
   settings: pageSettings,
   logs: pageLogs,
   modpanel: pageModPanel,
+  casino: pageCasino,
 };
 
 const chatBuf = buffers.chat;

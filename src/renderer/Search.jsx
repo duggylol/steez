@@ -25,6 +25,7 @@ const SETTING_PLACES = {
   hype: { route: 'hype', name: 'Hype' },
   clips: { route: 'hype', name: 'Clips' },
   modPanel: { route: 'modpanel', name: 'Mod Panel' },
+  casino: { route: 'casino', name: 'Web Casino' },
 };
 
 const KIND = {
@@ -38,7 +39,7 @@ const KIND = {
 };
 const ORDER = ['action', 'feature', 'page', 'section', 'overlay', 'setting', 'command'];
 
-const PAGE_ICON = { home: 'home', overlays: 'layers', alerts: 'bell', subathon: 'hourglass', shop: 'bag', hype: 'fire', commands: 'terminal', timers: 'clock', quotes: 'quote', ai: 'spark', moderation: 'shield', modpanel: 'users', loyalty: 'coin', games: 'dice', giveaways: 'gift', polls: 'chart', achievements: 'trophy', queue: 'queue', music: 'music', gifts: 'tiktok', analytics: 'chart', logs: 'log', import: 'download', settings: 'cog' };
+const PAGE_ICON = { home: 'home', overlays: 'layers', alerts: 'bell', subathon: 'hourglass', shop: 'bag', hype: 'fire', commands: 'terminal', timers: 'clock', quotes: 'quote', ai: 'spark', moderation: 'shield', modpanel: 'users', casino: 'coin', loyalty: 'coin', games: 'dice', giveaways: 'gift', polls: 'chart', achievements: 'trophy', queue: 'queue', music: 'music', gifts: 'tiktok', analytics: 'chart', logs: 'log', import: 'download', settings: 'cog' };
 
 const ACTIONS = [
   { id: 'a:trivia', title: 'Start a trivia round', keywords: ['trivia', 'quiz'], run: () => api.action('trivia:start', {}).then(() => toast('Trivia round started')) },

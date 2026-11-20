@@ -10,9 +10,13 @@ import { builtinList } from './bot/web/api.js';
 import { broadcast } from './bot/web/hub.js';
 import { LEVELS } from './bot/core/bot.js';
 import { log } from './bot/logger.js';
+import { casinoCall } from './bot/casino/service.js';
+import { setCasinoBase } from './bot/modules/casino.js';
 
 const GROUPS = ['commands', 'timers', 'quotes', 'giveaways', 'polls', 'songs', 'queue', 'points', 'moderation'];
 const P = () => db.settings.modPanel;
+// The same relay link carries the web casino's bets, so it stays up while either is on.
+const wanted = () => !!(P()?.enabled || db.settings.casino?.enabled);
 const clean = (n) => String(n || '').trim().toLowerCase().replace(/^!/, '');
 
 function record(mod, action, summary) {
@@ -201,9 +205,20 @@ export function startModPanel({ send, version = '' }) {
     }
   }
 
+  // A viewer's request from the casino website. The relay has already checked their Twitch login.
+  function handleCasino(msg) {
+    const reply = (obj) => ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'reply', id: msg.id, ...obj }));
+    try {
+      reply({ ok: true, result: casinoCall(msg.action, msg.args || {}, msg.user || {}) });
+    } catch (e) {
+      if (!e.user) log.warn('[casino] ' + (e.stack || e.message));
+      reply({ ok: false, error: e.user ? e.message : 'Something went wrong in the casino. Try again.' });
+    }
+  }
+
   function sendHello() {
     if (ws?.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'hello', info: { name: bot.state.channelDisplay || getAccount('broadcaster')?.login, permissions: P()?.enabled ? permissions() : {}, version } }));
+    ws.send(JSON.stringify({ type: 'hello', info: { name: bot.state.channelDisplay || getAccount('broadcaster')?.login, permissions: P()?.enabled ? permissions() : {}, version, casino: db.settings.casino?.enabled ? { title: String(db.settings.casino.title || '').slice(0, 60) } : null } }));
   }
 
   function connect() {
@@ -218,7 +233,7 @@ export function startModPanel({ send, version = '' }) {
       ws = null;
     }
     const acct = getAccount('broadcaster');
-    if (!P()?.enabled || !config.relayUrl) return setState('off');
+    if (!wanted() || !config.relayUrl) return setState('off');
     if (!acct) return setState('off', 'Connect your Twitch channel first.');
     if (acct.clientId && config.clientId && acct.clientId !== config.clientId)
       return setState('error', 'Your Twitch login came from another app (e.g. SongSeek). Reconnect your channel in Settings → Twitch accounts.');
@@ -239,6 +254,8 @@ export function startModPanel({ send, version = '' }) {
         return;
       }
       if (msg.type === 'call') handleCall(msg);
+      else if (msg.type === 'casino') handleCasino(msg);
+      else if (msg.type === 'welcome') setCasinoBase(msg.casinoUrl);
     });
     // The relay refused the connection. With a listener attached, `ws` does not close the socket
     // or emit 'close' on its own, so we read the reason, abort, and schedule the retry ourselves.
@@ -291,7 +308,7 @@ export function startModPanel({ send, version = '' }) {
 
   // Safety net: if we're enabled but neither connected nor waiting to retry, try again.
   setInterval(() => {
-    if (P()?.enabled && config.relayUrl && getAccount('broadcaster') && !ws && state !== 'online') {
+    if (wanted() && config.relayUrl && getAccount('broadcaster') && !ws && state !== 'online') {
       const pending = timer && timer._idleTimeout > 0 && !timer._destroyed;
       if (!pending) connect();
     }
@@ -310,7 +327,7 @@ export function startModPanel({ send, version = '' }) {
   bot.action('modpanel:activity', () => (db.modActivity || []).slice(0, 100));
   bot.action('modpanel:apply', () => {
     // Settings changed in Steez: reconnect if needed and tell the relay the new permissions.
-    if (!P()?.enabled) connect();
+    if (!wanted()) connect();
     else if (ws?.readyState === 1) sendHello();
     else connect();
     return status();

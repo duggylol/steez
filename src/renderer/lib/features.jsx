@@ -57,6 +57,7 @@ export const PAGE_FEATURE = {
   achievements: 'achievements',
   ai: 'ai',
   modpanel: 'modpanel',
+  casino: 'casino',
   chests: 'chests',
 };
 

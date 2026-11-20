@@ -22,7 +22,8 @@
     "relay:setup": "node scripts/relay-wizard.mjs",
     "relay:deploy": "cd relay && npx --yes wrangler@4 deploy",
     "ship": "node scripts/release.mjs",
-    "chests:build": "node scripts/build-chests.mjs"
+    "chests:build": "node scripts/build-chests.mjs",
+    "casino:vercel": "node scripts/casino-vercel.mjs --deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

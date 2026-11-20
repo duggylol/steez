@@ -21,8 +21,9 @@ import * as hype from './modules/hype.js';
 import * as ai from './modules/ai.js';
 import * as achievements from './modules/achievements.js';
 import * as stats from './modules/stats.js';
+import * as casino from './modules/casino.js';
 
-export const MODULES = { stream, commands, timers, moderation, loyalty, games, boss, minigames, giveaways, quotes, polls, events, shop, hype, ai, achievements, stats };
+export const MODULES = { stream, commands, timers, moderation, loyalty, games, boss, minigames, giveaways, quotes, polls, events, shop, hype, ai, achievements, stats, casino };
 
 let started = false;
 export async function startBot({ openUrl } = {}) {

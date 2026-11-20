@@ -206,6 +206,20 @@ export const defaultSettings = {
   },
   clips: { cooldownSeconds: 60, message: '🎬 Clip created by ${user}: ${clip}' },
   achievements: { enabled: true, announce: true, rewardPoints: 100 },
+  // The web casino: viewers log in with Twitch and play with their points. !casino posts the link.
+  casino: {
+    enabled: false,
+    title: '',
+    returnPercent: 97,
+    minBet: 10,
+    maxBet: 0,
+    feedFrom: 5,
+    announceFrom: 100,
+    games: {
+      slots: true, crash: true, plinko: true, mines: true, dice: true, wheel: true, keno: true, tower: true, coinflip: true,
+      hilo: true, cases: true, scratch: true, blackjack: true, roulette: true, baccarat: true, videopoker: true,
+    },
+  },
   // What your mods may change from the web Mod Panel (<relay>/mod).
   modPanel: {
     enabled: true,

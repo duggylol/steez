@@ -6,6 +6,7 @@ export const config = {
   publicUrl: process.env.STEEZ_PUBLIC_URL || 'http://127.0.0.1:43112',
   clientId: process.env.STEEZ_TWITCH_CLIENT_ID || '',
   relayUrl: process.env.STEEZ_RELAY_URL || '', // SteezBot relay (Cloudflare Worker)
+  casinoUrl: process.env.STEEZ_CASINO_URL || 'https://steezgames.xyz', // the web casino; the relay can override it
   // API keys live in the bot database (db.secrets) and are read through these getters.
   get anthropicKey() {
     return globalThis.__steezSecrets?.anthropicKey || process.env.ANTHROPIC_API_KEY || '';

@@ -4,6 +4,7 @@
 //    them a signed session. Their actions are forwarded to that channel's Steez, which applies
 //    only what the streamer allowed and answers. Nothing is stored here except the open socket.
 import { PANEL_HTML } from './panel.js';
+import { casinoUrl } from './casino.js';
 
 const SESSION_HOURS = 12;
 const CALL_TIMEOUT_MS = 15_000;
@@ -69,6 +70,7 @@ export async function handleMods(request, env, url, { validateUser }) {
     const req = new Request('https://hub/connect', request);
     req.headers.set('x-channel-id', user.userId);
     req.headers.set('x-channel-login', user.login);
+    req.headers.set('x-casino-url', casinoUrl(env, url));
     return hub(env, user.userId).fetch(req);
   }
 
@@ -158,6 +160,9 @@ export class ChannelHub {
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server, ['steez']);
       server.serializeAttachment({ channelId: request.headers.get('x-channel-id'), login: request.headers.get('x-channel-login'), connectedAt: Date.now(), info: null });
+      // Tell Steez where its casino lives, for the !casino link.
+      const casinoUrl = request.headers.get('x-casino-url');
+      if (casinoUrl) server.send(JSON.stringify({ type: 'welcome', casinoUrl }));
       return new Response(null, { status: 101, webSocket: client });
     }
     if (url.pathname === '/status') {
@@ -165,7 +170,7 @@ export class ChannelHub {
       const a = ws?.deserializeAttachment() || {};
       return json({ online: !!ws, info: a.info || null, connectedAt: a.connectedAt || null });
     }
-    if (url.pathname === '/call') {
+    if (url.pathname === '/call' || url.pathname === '/casino') {
       const ws = this.sock();
       if (!ws) return json({ ok: false, error: 'offline' }, 503);
       const body = await request.json();
@@ -180,7 +185,13 @@ export class ChannelHub {
           resolve(msg);
         });
         try {
-          ws.send(JSON.stringify({ type: 'call', id, action: body.action, args: body.args, mod: body.mod }));
+          ws.send(
+            JSON.stringify(
+              url.pathname === '/casino'
+                ? { type: 'casino', id, action: body.action, args: body.args, user: body.user }
+                : { type: 'call', id, action: body.action, args: body.args, mod: body.mod },
+            ),
+          );
         } catch {
           clearTimeout(timer);
           this.pending.delete(id);
@@ -208,7 +219,12 @@ export class ChannelHub {
     } else if (msg.type === 'hello') {
       const a = ws.deserializeAttachment() || {};
       // Keep it small: attachments are limited to 2 KB.
-      const info = { name: String(msg.info?.name || '').slice(0, 40), permissions: msg.info?.permissions || {}, version: String(msg.info?.version || '').slice(0, 20) };
+      const info = {
+        name: String(msg.info?.name || '').slice(0, 40),
+        permissions: msg.info?.permissions || {},
+        version: String(msg.info?.version || '').slice(0, 20),
+        casino: msg.info?.casino ? { title: String(msg.info.casino.title || '').slice(0, 60) } : null,
+      };
       ws.serializeAttachment({ ...a, info });
     } else if (msg.type === 'ping') {
       ws.send('{"type":"pong"}');

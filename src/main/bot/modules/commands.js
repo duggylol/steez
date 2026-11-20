@@ -93,7 +93,7 @@ export function init(bot) {
       const custom = Object.entries(db.commands)
         .filter(([, c]) => c.enabled !== false && !c.hidden && bot.hasLevel(ctx.user, c.level || 'everyone'))
         .map(([n]) => p + n);
-      const core = ['points', 'checkin', 'gamble', 'slots', 'fish', 'fishtop', 'duel', 'heist', 'jackpot', 'plinko', 'pnl', 'sr', 'song', 'join', 'queue', 'achievements', 'ask']
+      const core = ['points', 'checkin', 'gamble', 'slots', 'fish', 'fishtop', 'duel', 'heist', 'jackpot', 'plinko', 'casino', 'pnl', 'sr', 'song', 'join', 'queue', 'achievements', 'ask']
         .filter((n) => bot.findCommand(n) && bot.findCommand(n).def.enabled !== false)
         .map((n) => p + n);
       bot.reply(ctx, `Commands: ${[...core, ...custom].join(' ')} — use ${p}help <command> for details.`);

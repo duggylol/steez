@@ -116,6 +116,23 @@ export function registerBotFeatures(features, { db, save, bot }) {
   flag('achievements', 'Achievements', 'Viewers unlock badges for milestones.', 'achievements', 'achievements.enabled');
   flag('ai', 'AI', 'Answers @mentions in chat and can control Steez when allowed.', 'ai', 'ai.enabled');
   features.register({
+    id: 'casino',
+    name: 'Web Casino',
+    description: 'A casino website with 16 games where viewers play with their points. !casino posts the link.',
+    page: 'casino',
+    group: 'Chat bot',
+    get: () => !!S().casino?.enabled,
+    set: async (on) => {
+      S().casino.enabled = on;
+      save();
+      try {
+        await bot.runAction('modpanel:apply');
+      } catch {
+        /* the link isn't started yet */
+      }
+    },
+  });
+  features.register({
     id: 'modpanel',
     name: 'Mod Panel',
     description: 'Lets your mods change things from their browser while Steez is open.',

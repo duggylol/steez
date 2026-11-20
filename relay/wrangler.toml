@@ -5,12 +5,31 @@ name = "steez-relay"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
+# The casino's own domain. Its DNS must be on Cloudflare (status Active) before these can be
+# switched on; deploying then creates both and their certificates. Until then the site runs on
+# Vercel (CASINO_URL below) and calls this worker's /casino/api.
+# routes = [
+#   { pattern = "steezgames.xyz", custom_domain = true },
+#   { pattern = "www.steezgames.xyz", custom_domain = true },
+# ]
 
 [vars]
 TWITCH_CLIENT_ID = "ozc63b300yxoa4w6vwygci39njppml"
 BOT_LOGIN = "steezzzbot"
 # Comma-separated Twitch user IDs of channels that may not use SteezBot (abuse kill switch).
 BLOCKED_CHANNELS = ""
+# The web casino's domain: each streamer's casino is https://<CASINO_HOST>/<their channel>.
+# Empty: the casino lives at <this worker>/casino.
+# Set to "steezgames.xyz" (and empty CASINO_URL) once the domain is Active on Cloudflare.
+CASINO_HOST = ""
+# Where !casino links point while the site is hosted elsewhere. Empty: use CASINO_HOST.
+CASINO_URL = "https://steez-casino.vercel.app"
+
+# The casino website's files (served by the worker, which runs first for every request).
+[assets]
+directory = "./casino-site"
+binding = "ASSETS"
+run_worker_first = true
 
 # Mod panel: one Durable Object per channel holds that streamer's live Steez connection.
 [[durable_objects.bindings]]

@@ -46,6 +46,7 @@ export const NAV = [
     items: [
       { id: 'loyalty', label: 'Points & Viewers', icon: 'coin' },
       { id: 'games', label: 'Games', icon: 'dice' },
+      { id: 'casino', label: 'Web Casino', icon: 'coin' },
       { id: 'giveaways', label: 'Giveaways', icon: 'gift' },
       { id: 'polls', label: 'Polls & Bets', icon: 'chart' },
       { id: 'achievements', label: 'Achievements', icon: 'trophy' },
@@ -75,7 +76,7 @@ export const NAV = [
   },
 ];
 const ALL = NAV.flatMap((g) => g.items);
-const BOT_PAGES = new Set(['commands', 'timers', 'moderation', 'loyalty', 'games', 'giveaways', 'polls', 'quotes', 'achievements', 'ai', 'modpanel', 'alerts', 'shop', 'hype', 'analytics', 'logs']);
+const BOT_PAGES = new Set(['commands', 'timers', 'moderation', 'loyalty', 'games', 'giveaways', 'polls', 'quotes', 'achievements', 'ai', 'modpanel', 'casino', 'alerts', 'shop', 'hype', 'analytics', 'logs']);
 
 function TitleBar({ twitch, update, onSearch }) {
   const [max, setMax] = useState(false);

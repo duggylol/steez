@@ -7,6 +7,7 @@
 // against Twitch and never stored (only a hash is cached for a few minutes).
 
 import { handleMods, ChannelHub } from './mods.js';
+import { handleCasino, _resetCasino } from './casino.js';
 
 const REDIRECT_URI = 'http://localhost:43111';
 const BOT_SCOPES = 'user:bot user:write:chat user:read:chat';
@@ -108,6 +109,9 @@ const blocked = (env, id) =>
 export async function handle(request, env) {
   const url = new URL(request.url);
   try {
+    const casinoResponse = await handleCasino(request, env, url, { validateUser, helix });
+    if (casinoResponse) return casinoResponse;
+
     if (request.method === 'GET' && url.pathname === '/') return json({ name: 'steez-relay', ok: true });
 
     if (request.method === 'GET' && url.pathname === '/v1/status') {
@@ -168,4 +172,5 @@ export function _reset() {
   botUser = null;
   validated.clear();
   buckets.clear();
+  _resetCasino();
 }
