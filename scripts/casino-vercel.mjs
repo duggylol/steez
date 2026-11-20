@@ -40,7 +40,8 @@ fs.writeFileSync(
       trailingSlash: false,
       rewrites: [
         { source: '/api/:path*', destination: `${relay}/casino/api/:path*` },
-        { source: '/((?!static/).*)', destination: '/index.html' },
+        // every other path is a page of the app (files like /static/app.js are served before rewrites)
+        { source: '/:path*', destination: '/index.html' },
       ],
       headers: [
         { source: '/(.*)', headers: security },
