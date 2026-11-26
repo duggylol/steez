@@ -14,6 +14,7 @@ import { bot, LEVELS } from '../core/bot.js';
 import { broadcast } from './hub.js';
 import { ACHIEVEMENTS } from '../modules/achievements.js';
 import { normLogin } from '../util.js';
+import { isChatDockKey } from '../chatFeed.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.resolve(here, '../public');
@@ -174,6 +175,19 @@ export function createBotRouter({ key, openUrl }) {
       watch: [...list].sort((a, b) => b.watchMinutes - a.watchMinutes).slice(0, 25).map(map),
     });
   });
+
+  // ─── Twitch Chat OBS dock (its own lasting key, chat only) ──
+  const dock = (fn) => async (req, res) => {
+    if (!isChatDockKey(req.get('x-dock-key') || req.query.key)) return res.status(401).json({ error: 'This dock link is out of date. Copy it again from Steez → Twitch Chat → OBS dock.' });
+    try {
+      res.json({ result: await fn(req.body || {}) });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  };
+  r.get('/dockapi/chat/recent', dock(() => bot.runAction('chatfeed:recent')));
+  r.post('/dockapi/chat/refresh', dock(() => bot.runAction('chatfeed:refresh')));
+  r.post('/dockapi/chat/mod', dock((b) => bot.runAction('chatfeed:mod', b)));
 
   // ─── Private (Steez window only) ───────────────────────────
   r.use('/api', (req, res, next) => {

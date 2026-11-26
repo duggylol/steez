@@ -2,7 +2,9 @@
 // badge and emote art (Twitch, 7TV, BTTV, FFZ) the page needs to draw them like Twitch does.
 // Lines are sent to the Steez window as they arrive; the last few hundred are kept for new views.
 import WebSocket from 'ws';
-import { db } from './store.js';
+import crypto from 'node:crypto';
+import { config } from './config.js';
+import { db, save } from './store.js';
 import { log } from './logger.js';
 import { broadcast } from './web/hub.js';
 import { helix } from './twitch/helix.js';
@@ -10,6 +12,23 @@ import { getAccount, onAuthChange } from './twitch/auth.js';
 import { normLogin } from './util.js';
 
 const KEEP = 400;
+
+// OBS dock: a link with its own lasting key (the Steez window's key changes every launch). The key
+// only opens the chat: reading it, reloading emotes and the mod buttons.
+export function chatDockKey(renew = false) {
+  db.secrets ||= {};
+  if (renew || !db.secrets.chatDockKey) {
+    db.secrets.chatDockKey = crypto.randomBytes(18).toString('hex');
+    save();
+  }
+  return db.secrets.chatDockKey;
+}
+export function isChatDockKey(k) {
+  const want = db.secrets?.chatDockKey;
+  if (typeof k !== 'string' || !want || k.length !== want.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want));
+}
+export const chatDockUrl = () => `${config.publicUrl}/?dock=${chatDockKey()}`;
 // Developer preview: STEEZ_CHAT_DEMO=<twitch user id>:<login> (see chatDemo.js).
 const DEMO = /^(\d+):(\w+)$/.exec(process.env.STEEZ_CHAT_DEMO || '');
 const recent = [];
@@ -302,6 +321,7 @@ export function createChatFeed(bot) {
 
   bot.action('chatfeed:recent', async () => ({ items: recent.slice(-KEEP), assets: assets.at ? assets : await reload() }));
   bot.action('chatfeed:refresh', () => reload());
+  bot.action('chatfeed:dock', ({ renew } = {}) => (renew && chatDockKey(true), { url: chatDockUrl() }));
   bot.action('chatfeed:mod', async ({ act, id, login, userId, seconds }) => {
     const user = { login: normLogin(login), id: userId || undefined };
     if (act === 'delete') return bot.deleteMessage(String(id));

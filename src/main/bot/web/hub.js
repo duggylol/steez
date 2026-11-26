@@ -1,6 +1,7 @@
 // WebSocket hub shared by the Steez UI and the bot overlays (path /ws).
 // The UI connects with ?key=<launch key> and also receives dashboard-only events (chat, logs).
 import { WebSocketServer } from 'ws';
+import { isChatDockKey } from '../chatFeed.js';
 
 const clients = new Set();
 const handlers = new Map();
@@ -10,6 +11,12 @@ export function createHub({ isAuthed }) {
   const wss = new WebSocketServer({ noServer: true });
   wss.on('connection', (ws, req) => {
     ws.isDashboard = isAuthed(req);
+    // the Twitch Chat OBS dock: gets chat lines only
+    try {
+      ws.isChatDock = !ws.isDashboard && isChatDockKey(new URL(req.url, 'http://x').searchParams.get('dock'));
+    } catch {
+      ws.isChatDock = false;
+    }
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));
     ws.on('message', (raw) => {
@@ -36,7 +43,7 @@ export function broadcast(type, data, { dashboardOnly = false } = {}) {
   const payload = JSON.stringify({ type, data });
   for (const ws of clients) {
     if (ws.readyState !== 1) continue;
-    if (dashboardOnly && !ws.isDashboard) continue;
+    if (dashboardOnly && !ws.isDashboard && !(ws.isChatDock && type.startsWith('chatfeed'))) continue;
     ws.send(payload);
   }
 }

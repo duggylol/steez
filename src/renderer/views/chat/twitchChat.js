@@ -19,7 +19,7 @@ export const EXTRAS = [
   ['first', 'First-time chatters'],
 ];
 export const DEFAULT_LAYOUT = {
-  dir: 'cols',
+  dir: 'auto', // auto: side by side when there's room for every pane, stacked when narrow
   font: 13,
   timestamps: false,
   modIcons: true,
@@ -63,6 +63,8 @@ const SVG = {
   raid: 'M4 12h12M12 6l6 6-6 6M4 6v12',
   coin: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9 12h6M12 9v6',
   mega: 'M4 10v4h3l6 4V6L7 10zM17 9a4 4 0 0 1 0 6',
+  obs: 'M4 5h16v14H4zM4 9h16M15 9v10',
+  auto: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
 };
 const icon = (name) => {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -180,7 +182,8 @@ export function renderBody(text, ranges, emotes, me) {
         a.href = /^https?:/i.test(w) ? w : `https://${w}`;
         a.addEventListener('click', (ev) => {
           ev.preventDefault();
-          window.steez?.open?.(a.href);
+          if (window.steez?.open) window.steez.open(a.href);
+          else window.open(a.href, '_blank', 'noopener'); // OBS dock
         });
         frag.append(a);
       } else if (w[0] === '@' && w.length > 1) {
@@ -193,8 +196,67 @@ export function renderBody(text, ranges, emotes, me) {
   return frag;
 }
 
+// ─── Getting the lines: from Steez itself, or (in an OBS dock) with the dock key ──
+function appTransport() {
+  return {
+    recent: () => api.action('chatfeed:recent'),
+    refresh: () => api.action('chatfeed:refresh'),
+    mod: (a) => api.action('chatfeed:mod', a),
+    listen(h) {
+      connectBotSocket();
+      const offs = [onBot('chatfeed', h.add), onBot('chatfeed:del', h.del), onBot('chatfeed:assets', h.assets)];
+      return () => offs.forEach((f) => f());
+    },
+  };
+}
+function dockTransport(key) {
+  const call = async (method, path, body) => {
+    const r = await fetch(`/dockapi/chat/${path}`, { method, headers: { 'x-dock-key': key, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.error || `Steez answered ${r.status}`), { status: r.status });
+    return j.result;
+  };
+  return {
+    recent: () => call('GET', 'recent'),
+    refresh: () => call('POST', 'refresh', {}),
+    mod: (a) => call('POST', 'mod', a),
+    listen(h) {
+      let ws = null;
+      let dead = false;
+      let timer = 0;
+      const open = () => {
+        ws = new WebSocket(`ws://${location.host}/ws?dock=${encodeURIComponent(key)}`);
+        ws.onopen = () => h.connected?.();
+        ws.onmessage = (ev) => {
+          let m;
+          try {
+            m = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+          if (m.type === 'chatfeed') h.add(m.data);
+          else if (m.type === 'chatfeed:del') h.del(m.data);
+          else if (m.type === 'chatfeed:assets') h.assets(m.data);
+        };
+        // Steez closed or restarted: keep trying, then reload what was missed
+        ws.onclose = () => {
+          if (!dead) timer = setTimeout(open, 3000);
+          h.lost?.();
+        };
+      };
+      open();
+      return () => {
+        dead = true;
+        clearTimeout(timer);
+        ws?.close();
+      };
+    },
+  };
+}
+
 // ─── The view ──────────────────────────────────────────────────────
-export function mountTwitchChat(root, { popout = false } = {}) {
+export function mountTwitchChat(root, { popout = false, dock = null } = {}) {
+  const T = dock ? dockTransport(dock) : appTransport();
   let layout = loadLayout();
   let assets = { badges: {}, emotes: {}, counts: {}, channel: null };
   const items = [];
@@ -208,7 +270,10 @@ export function mountTwitchChat(root, { popout = false } = {}) {
   const shell = el('div', `tc-root${popout ? ' popout' : ''}`);
   const status = el('span', 'st', 'Connecting…');
   const panesEl = el('div', 'tc-panes');
-  const dirBtn = btn(null, 'Side by side or stacked', () => setLayout({ dir: layout.dir === 'cols' ? 'rows' : 'cols' }));
+  const DIRS = { auto: 'Layout: automatic (side by side when there is room). Click for side by side', cols: 'Layout: side by side. Click for stacked', rows: 'Layout: stacked. Click for automatic' };
+  const dirBtn = btn(null, DIRS.auto, () => setLayout({ dir: { auto: 'cols', cols: 'rows', rows: 'auto' }[layout.dir] || 'auto' }));
+  // the direction actually used: 'auto' picks by the width available for each pane
+  const stacked = () => (layout.dir === 'auto' ? panesEl.clientWidth / Math.max(1, layout.panes.length) < 230 : layout.dir === 'rows');
   const bar = el('div', 'tc-bar');
   bar.append(
     el('span', 't', 'Twitch Chat'),
@@ -217,17 +282,22 @@ export function mountTwitchChat(root, { popout = false } = {}) {
     btn('plus', 'Add a pane', () => addPane(), 'tc-btn'),
     dirBtn,
     btn('sliders', 'Chat settings', (e) => openAppSettings(e.currentTarget)),
-    btn('refresh', 'Reload badges and emotes', () => api.action('chatfeed:refresh').then(applyAssets).catch(() => {})),
+    btn('refresh', 'Reload badges and emotes', () => T.refresh().then(applyAssets).catch(() => {})),
   );
   bar.children[3].append(' Pane');
-  if (popout) {
+  if (popout && window.steez?.chat) {
     const pin = btn('pin', 'Keep this window on top', async () => {
       const on = await window.steez.chat.onTop(!pin.classList.contains('on'));
       pin.classList.toggle('on', !!on);
     });
     bar.append(pin);
-  } else bar.append(btn('out', 'Pop out into its own window', () => window.steez?.chat?.popout(), 'tc-btn'));
-  if (!popout) bar.lastChild.append(' Pop out');
+  } else if (!popout) {
+    const obs = btn('obs', 'Use this chat as a dock inside OBS', (e) => openDockInfo(e.currentTarget), 'tc-btn');
+    obs.append(' OBS dock');
+    const out = btn('out', 'Pop out into its own window', () => window.steez?.chat?.popout(), 'tc-btn');
+    out.append(' Pop out');
+    bar.append(obs, out);
+  }
   shell.append(bar, panesEl);
   root.replaceChildren(shell);
 
@@ -263,8 +333,9 @@ export function mountTwitchChat(root, { popout = false } = {}) {
 
   function applyLook() {
     shell.style.setProperty('--tc-font', `${layout.font}px`);
-    panesEl.classList.toggle('rows', layout.dir === 'rows');
-    dirBtn.replaceChildren(icon(layout.dir === 'rows' ? 'rows' : 'cols'));
+    panesEl.classList.toggle('rows', stacked());
+    dirBtn.replaceChildren(icon(layout.dir === 'auto' ? 'auto' : layout.dir === 'rows' ? 'rows' : 'cols'));
+    dirBtn.title = DIRS[layout.dir] || DIRS.auto;
   }
 
   // ─── Rendering a line ──
@@ -348,7 +419,7 @@ export function mountTwitchChat(root, { popout = false } = {}) {
     const act = (a, extra) => (ev) => {
       ev.stopPropagation();
       if (a === 'ban' && !confirm(`Ban ${item.user.display} from the channel?`)) return;
-      api.action('chatfeed:mod', { act: a, id: item.id, login: item.user.login, userId: item.user.id, ...extra }).catch(() => {});
+      T.mod({ act: a, id: item.id, login: item.user.login, userId: item.user.id, ...extra }).catch(() => {});
     };
     box.append(btn('trash', 'Delete message', act('delete'), ''), btn('clock', 'Timeout 10 minutes', act('timeout', { seconds: 600 }), ''), btn('ban', 'Ban user', act('ban'), ''));
     return box;
@@ -455,7 +526,7 @@ export function mountTwitchChat(root, { popout = false } = {}) {
       s.classList.add('drag');
       s.setPointerCapture(e.pointerId);
       const a = panes[i - 1], b = panes[i];
-      const rows = layout.dir === 'rows';
+      const rows = stacked();
       const ra = a.el.getBoundingClientRect(), rb = b.el.getBoundingClientRect();
       const total = rows ? ra.height + rb.height : ra.width + rb.width;
       const wsum = (a.cfg.w || 1) + (b.cfg.w || 1);
@@ -623,22 +694,87 @@ export function mountTwitchChat(root, { popout = false } = {}) {
     build();
   }
 
+  // The OBS dock link, to paste into OBS → Docks → Custom Browser Docks.
+  function openDockInfo(anchor) {
+    const old = shell.querySelector('.tc-pop.app');
+    if (old) return old.remove();
+    const pop = el('div', 'tc-pop app');
+    pop.style.width = '340px';
+    const url = el('input');
+    url.type = 'text';
+    url.readOnly = true;
+    url.value = 'Loading…';
+    const copy = el('button', 'tc-btn primary', 'Copy link');
+    const renew = el('button', 'tc-btn', 'New link');
+    const show = (r) => (url.value = r.url);
+    api.action('chatfeed:dock').then(show).catch(() => {});
+    copy.addEventListener('click', () => {
+      (window.steez?.copy ? window.steez.copy(url.value) : navigator.clipboard.writeText(url.value)).then(() => (copy.textContent = 'Copied ✓'));
+    });
+    renew.addEventListener('click', () => {
+      if (confirm('Make a new dock link? The old link stops working, so you will need to paste the new one into OBS.')) api.action('chatfeed:dock', { renew: true }).then(show);
+    });
+    const steps = el('div', null);
+    steps.style.cssText = 'color:var(--tc-muted);line-height:1.55';
+    steps.append('In OBS: ', el('b', null, 'Docks → Custom Browser Docks'), ', type a name (like "Chat"), paste the link as the URL, then Apply. The dock is a window you can snap anywhere in OBS. It uses the same pane layout options and works while Steez is running.');
+    const row = el('div', 'row');
+    row.append(renew, copy);
+    url.addEventListener('focus', () => url.select());
+    pop.append(el('div', 'h', 'OBS dock link'), url, row, steps, el('div', 'h', 'Keep this link private: it shows your chat and can use the mod buttons.'));
+    const r = anchor.getBoundingClientRect();
+    pop.style.top = `${r.bottom + 6}px`;
+    pop.style.right = `${Math.max(10, innerWidth - r.right)}px`;
+    shell.append(pop);
+    const close = (e) => {
+      if (!pop.contains(e.target) && !anchor.contains(e.target)) {
+        pop.remove();
+        document.removeEventListener('pointerdown', close, true);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+  }
+
   // ─── Start ──
+  const ro = new ResizeObserver(() => {
+    if (layout.dir === 'auto' && panesEl.classList.contains('rows') !== stacked()) applyLook();
+  });
+  ro.observe(panesEl);
+  offs.push(() => ro.disconnect());
   build();
-  connectBotSocket();
-  offs.push(onBot('chatfeed', add), onBot('chatfeed:del', markDeleted), onBot('chatfeed:assets', applyAssets));
-  api
-    .action('chatfeed:recent')
-    .then((r) => {
-      if (!alive) return;
-      // lines that arrived live while the backlog was loading stay, without doubles
-      const lastN = (r.items || []).reduce((m, it) => Math.max(m, it.n || 0), 0);
-      const live = items.filter((it) => (it.n || 0) > lastN);
-      items.length = 0;
-      items.push(...(r.items || []), ...live);
-      applyAssets(r.assets);
-    })
-    .catch(() => (status.textContent = 'Chat is starting…'));
+  let retry = 0;
+  function loadRecent() {
+    T.recent()
+      .then((r) => {
+        if (!alive) return;
+        retry = 0;
+        // lines that arrived live while the backlog was loading stay, without doubles
+        const lastN = (r.items || []).reduce((m, it) => Math.max(m, it.n || 0), 0);
+        const live = items.filter((it) => (it.n || 0) > lastN);
+        items.length = 0;
+        items.push(...(r.items || []), ...live);
+        applyAssets(r.assets);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        if (e.status === 401) return (status.textContent = e.message);
+        status.textContent = dock ? 'Waiting for Steez… open Steez and this dock connects by itself.' : 'Chat is starting…';
+        if (dock) setTimeout(loadRecent, Math.min(15000, 2000 * ++retry));
+      });
+  }
+  let wasLost = false;
+  offs.push(
+    T.listen({
+      add,
+      del: markDeleted,
+      assets: applyAssets,
+      lost: () => {
+        wasLost = true;
+        if (dock && alive) status.textContent = 'Waiting for Steez… open Steez and this dock connects by itself.';
+      },
+      connected: () => wasLost && loadRecent(), // catch up on what came in while Steez was away
+    }),
+  );
+  loadRecent();
 
   return () => {
     alive = false;
