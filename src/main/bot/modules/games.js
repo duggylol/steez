@@ -4,7 +4,7 @@ import { parseAmount, randInt, pick, weightedPick, fmtNum, normLogin, todayKey, 
 import { keep, restore, resumeAt } from '../session.js';
 import { castFish, cleanTiers } from '../fishing.js';
 import { pickWinner, chanceOf } from '../jackpot.js';
-import { recordPlay, viewerPnl, channelPnl, resetPnl } from '../pnl.js';
+import { recordPlay, viewerPnl, channelPnl, resetPnl, resetViewerPnl } from '../pnl.js';
 import { plinkoBoard, dropBall, ballColor, PLINKO_TIMING } from '../plinko.js';
 
 export function init(bot) {
@@ -462,6 +462,12 @@ export function init(bot) {
   });
   bot.action('pnl:report', () => channelPnl({ skip: pnlSkip() }));
   bot.action('pnl:reset', () => (resetPnl(), true));
+  bot.action('pnl:resetViewer', ({ login }) => {
+    const l = normLogin(login);
+    if (!l) throw new Error('Type a viewer name.');
+    if (!resetViewerPnl(l)) throw new Error(`${l} has no gambling PnL to reset.`);
+    return true;
+  });
 
   // ─── Roulette ───────────────────────────────────────────────
   bot.command('roulette', {

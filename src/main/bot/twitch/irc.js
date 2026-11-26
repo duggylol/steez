@@ -135,6 +135,13 @@ export class TwitchIRC extends EventEmitter {
         if (isSharedFromElsewhere(m.tags)) break;
         this.emit('message', { tags: m.tags, login: m.nick, channel: (m.params[0] || '').slice(1), text: m.trailing });
         break;
+      // A deleted message, or a user's messages cleared (timeout/ban), or the whole chat cleared.
+      case 'CLEARMSG':
+        this.emit('clearmsg', { tags: m.tags, text: m.trailing });
+        break;
+      case 'CLEARCHAT':
+        this.emit('clearchat', { tags: m.tags, login: m.trailing || null });
+        break;
       case 'USERNOTICE':
         if (isSharedFromElsewhere(m.tags)) break;
         this.emit('usernotice', { tags: m.tags, text: m.trailing });

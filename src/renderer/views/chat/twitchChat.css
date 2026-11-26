@@ -1,0 +1,123 @@
+/* Twitch Chat page: Twitch's own dark chat look, in panes the streamer arranges. */
+.tc-root {
+  --tc-bg: #18181b;
+  --tc-bg-2: #0e0e10;
+  --tc-line: #2f2f35;
+  --tc-hover: #26262c;
+  --tc-text: #efeff1;
+  --tc-muted: #adadb8;
+  --tc-purple: #9147ff;
+  --tc-font: 13px;
+  font-family: 'Inter Variable', Inter, Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--tc-text);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--titlebar-h, 48px) - 40px);
+  min-height: 420px;
+  background: var(--tc-bg-2);
+  border: 1px solid var(--tc-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.page-inner:has(.tc-root) { max-width: none; padding: 16px 18px 18px; }
+.tc-root.popout { height: 100vh; border: 0; border-radius: 0; min-height: 0; }
+
+/* Toolbar */
+.tc-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--tc-bg); border-bottom: 1px solid var(--tc-line); flex: none; min-width: 0; }
+.tc-bar .t { font-weight: 700; font-size: 14px; margin-right: 6px; white-space: nowrap; }
+.tc-bar .st { color: var(--tc-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tc-bar .grow { flex: 1; }
+.tc-btn { height: 30px; padding: 0 10px; border-radius: 4px; border: 0; background: transparent; color: var(--tc-text); font: 600 13px inherit; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.tc-btn:hover { background: rgba(83, 83, 95, .48); }
+.tc-btn.on { background: rgba(145, 71, 255, .25); color: #bf94ff; }
+.tc-btn.primary { background: var(--tc-purple); color: #fff; }
+.tc-btn.primary:hover { background: #772ce8; }
+.tc-btn svg { width: 16px; height: 16px; flex: none; }
+.tc-btn.ic { width: 30px; padding: 0; justify-content: center; }
+
+/* Panes */
+.tc-panes { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.tc-panes.rows { flex-direction: column; }
+.tc-pane { position: relative; display: flex; flex-direction: column; min-width: 180px; min-height: 120px; background: var(--tc-bg); flex: var(--w, 1) 1 0; }
+.tc-split { flex: none; background: var(--tc-line); position: relative; z-index: 2; }
+.tc-panes:not(.rows) > .tc-split { width: 1px; cursor: col-resize; }
+.tc-panes.rows > .tc-split { height: 1px; cursor: row-resize; }
+.tc-split::after { content: ''; position: absolute; inset: -4px; }
+.tc-split:hover, .tc-split.drag { background: var(--tc-purple); }
+.tc-head { height: 44px; flex: none; display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; border-bottom: 1px solid var(--tc-line); padding: 0 4px; user-select: none; }
+.tc-head .tc-btn.ic { width: 26px; height: 26px; }
+.tc-head .tc-btn svg { width: 14px; height: 14px; }
+.tc-head .nm { text-align: center; font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-head .nm small { color: var(--tc-muted); font-weight: 500; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.tc-head .l, .tc-head .r { display: flex; gap: 2px; }
+.tc-head .r { justify-content: flex-end; }
+.tc-head .grip { cursor: grab; }
+.tc-pane.dragging { opacity: .4; }
+.tc-pane.drop-before { box-shadow: inset 3px 0 0 var(--tc-purple); }
+.tc-panes.rows .tc-pane.drop-before { box-shadow: inset 0 3px 0 var(--tc-purple); }
+.tc-list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 0 10px; overscroll-behavior: contain; contain: strict; }
+.tc-list::-webkit-scrollbar { width: 6px; }
+.tc-list::-webkit-scrollbar-thumb { background: #3b3b44; border-radius: 6px; border: 0; }
+.tc-list::-webkit-scrollbar-track { background: transparent; }
+.tc-empty { color: var(--tc-muted); text-align: center; padding: 28px 20px; font-size: 13px; }
+.tc-paused { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; background: rgba(0, 0, 0, .82); color: var(--tc-text); border: 0; border-radius: 4px; padding: 6px 12px; font: 600 12px inherit; font-family: inherit; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .5); white-space: nowrap; }
+.tc-paused:hover { background: #000; }
+
+/* Chat lines (Twitch metrics: 13px Inter, 20px lines, 5px 20px padding, 18px badges, 28px emotes) */
+.tc-ln { position: relative; padding: 5px 20px; font-size: var(--tc-font); line-height: calc(var(--tc-font) * 1.54); overflow-wrap: anywhere; word-break: break-word; }
+.tc-ln:hover { background: var(--tc-hover); }
+.tc-ts { color: var(--tc-muted); font-size: calc(var(--tc-font) * .92); margin-right: 5px; font-variant-numeric: tabular-nums; }
+.tc-badge { width: 18px; height: 18px; vertical-align: middle; margin: -2px 3px 0 0; border-radius: 3px; }
+.tc-name { font-weight: 700; cursor: default; }
+.tc-colon { margin-right: 4px; }
+.tc-emote { vertical-align: middle; margin: -4px 0; height: auto; max-height: calc(var(--tc-font) * 2.15); width: auto; max-width: calc(var(--tc-font) * 9); object-fit: contain; }
+.tc-stack { display: inline-grid; vertical-align: middle; margin: -4px 0; }
+.tc-stack > .tc-emote { grid-area: 1 / 1; margin: 0; justify-self: center; align-self: center; }
+.tc-mention { font-weight: 700; }
+.tc-me .tc-mention { background: rgba(255, 255, 255, .12); border-radius: 3px; padding: 0 2px; }
+.tc-link { color: #bf94ff; text-decoration: none; cursor: pointer; }
+.tc-link:hover { text-decoration: underline; }
+.tc-act .tc-body { font-style: italic; }
+.tc-del .tc-body { color: var(--tc-muted); font-style: italic; }
+.tc-reply { color: var(--tc-muted); font-size: calc(var(--tc-font) * .92); line-height: 1.4; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; }
+.tc-reply svg { width: 13px; height: 13px; flex: none; }
+.tc-mentioned { background: rgba(235, 4, 0, .22); }
+.tc-mentioned:hover { background: rgba(235, 4, 0, .3); }
+.tc-first { border-left: 4px solid var(--tc-purple); padding-left: 16px; background: rgba(145, 71, 255, .08); }
+.tc-first .tc-tag, .tc-hl .tc-tag { display: block; color: var(--tc-muted); font-size: calc(var(--tc-font) * .9); font-weight: 600; margin-bottom: 2px; }
+.tc-hl { background: rgba(117, 94, 188, .45); border-left: 4px solid #a970ff; padding-left: 16px; }
+.tc-self .tc-name::after { content: ' (Steez)'; color: var(--tc-muted); font-weight: 500; }
+
+/* Mod icons (shown on hover, like Twitch mod view) */
+.tc-mod { display: none; position: absolute; left: 2px; top: 50%; transform: translateY(-50%); flex-direction: column; gap: 1px; }
+.tc-ln:hover .tc-mod { display: flex; }
+.tc-mod button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--tc-muted); cursor: pointer; display: grid; place-items: center; }
+.tc-mod button:hover { background: rgba(83, 83, 95, .6); color: #fff; }
+.tc-mod svg { width: 12px; height: 12px; }
+
+/* Notices: subs, gifts, raids, bits, follows, redemptions, announcements */
+.tc-note { margin: 4px 0; padding: 7px 20px 7px 16px; border-left: 4px solid var(--tc-purple); background: #1f1f23; font-size: var(--tc-font); line-height: calc(var(--tc-font) * 1.54); }
+.tc-note .sys { font-weight: 600; display: flex; gap: 6px; align-items: flex-start; }
+.tc-note .sys svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.tc-note .tc-ln { padding: 4px 0 0; }
+.tc-note .tc-ln:hover { background: none; }
+.tc-note.follow { border-left-color: #00c7ac; }
+.tc-note.cheer { border-left-color: #9c3ee8; }
+.tc-note.raid { border-left-color: #eb0400; }
+.tc-note.redeem { border-left-color: #ffb31a; }
+.tc-note.timeout, .tc-note.ban, .tc-note.clear { border-left-color: #53535f; background: transparent; color: var(--tc-muted); }
+.tc-note.timeout .sys, .tc-note.ban .sys, .tc-note.clear .sys { font-weight: 500; }
+.tc-note.announcement { border-left: 0; padding-left: 20px; background: linear-gradient(var(--tc-bg), var(--tc-bg)) padding-box, linear-gradient(135deg, var(--a1, #00d6d6), var(--a2, #9146ff)) border-box; border: 5px solid transparent; border-width: 0 0 0 5px; }
+.tc-note .tc-label { display: block; font-size: calc(var(--tc-font) * .9); color: var(--tc-muted); font-weight: 600; margin-bottom: 2px; }
+
+/* Pane settings popover and app settings */
+.tc-pop { position: absolute; top: 44px; left: 8px; right: 8px; z-index: 10; background: #1f1f23; border: 1px solid #3b3b44; border-radius: 6px; padding: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .6); display: grid; gap: 10px; font-size: 13px; }
+.tc-pop.app { left: auto; right: 10px; top: 46px; width: 290px; position: fixed; }
+.tc-pop label.ck { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.tc-pop input[type=checkbox] { accent-color: var(--tc-purple); width: 15px; height: 15px; }
+.tc-pop input[type=text], .tc-pop select { width: 100%; height: 32px; border-radius: 4px; border: 2px solid #3b3b44; background: var(--tc-bg-2); color: var(--tc-text); padding: 0 8px; font: inherit; outline: none; }
+.tc-pop input[type=text]:focus { border-color: var(--tc-purple); }
+.tc-pop input[type=range] { width: 100%; accent-color: var(--tc-purple); }
+.tc-pop .h { font-size: 11px; font-weight: 700; color: var(--tc-muted); text-transform: uppercase; letter-spacing: .06em; }
+.tc-pop .row { display: flex; gap: 6px; justify-content: flex-end; }
+.tc-root .hidden { display: none !important; }

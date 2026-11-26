@@ -286,6 +286,7 @@ async function createWindow() {
     steez.set('windowBounds', { ...win.getNormalBounds(), maximized: win.isMaximized() });
   };
   win.on('close', saveBounds);
+  win.on('closed', () => chatWin && !chatWin.isDestroyed() && chatWin.close()); // the chat pop-out goes with Steez
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -293,6 +294,39 @@ async function createWindow() {
   const ready = new Promise((r) => win.once('ready-to-show', r));
   await win.loadURL(DEV ? 'http://127.0.0.1:5173' : server.url('/'));
   await ready;
+}
+
+// ─── Twitch Chat pop-out window ─────────────────────────────────
+let chatWin = null;
+async function openChatPopout() {
+  if (chatWin && !chatWin.isDestroyed()) {
+    if (chatWin.isMinimized()) chatWin.restore();
+    return chatWin.focus();
+  }
+  const b = steez.get('chatPopoutBounds');
+  chatWin = new BrowserWindow({
+    width: b?.width || 440,
+    height: b?.height || 820,
+    x: b?.x,
+    y: b?.y,
+    minWidth: 300,
+    minHeight: 300,
+    backgroundColor: '#0e0e10',
+    title: 'Twitch Chat · Steez',
+    icon: path.join(ROOT, 'build', 'icon.png'),
+    alwaysOnTop: !!b?.onTop,
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  chatWin.removeMenu();
+  const save = () => chatWin && !chatWin.isDestroyed() && steez.set('chatPopoutBounds', { ...chatWin.getNormalBounds(), onTop: chatWin.isAlwaysOnTop() });
+  chatWin.on('close', save);
+  chatWin.on('closed', () => (chatWin = null));
+  chatWin.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  await chatWin.loadURL(DEV ? 'http://127.0.0.1:5173/?popout=chat' : server.url('/?popout=chat'));
 }
 
 // ─── IPC (shell-level) ──────────────────────────────────────────
@@ -348,6 +382,15 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('steez:openLogs', () => shell.openPath(app.getPath('userData')));
+  ipcMain.handle('steez:chat:popout', () => openChatPopout());
+  ipcMain.handle('steez:chat:onTop', (e, on) => {
+    const w = BrowserWindow.fromWebContents(e.sender);
+    if (!w || w === win) return false;
+    w.setAlwaysOnTop(!!on);
+    steez.set('chatPopoutBounds', { ...w.getNormalBounds(), onTop: !!on });
+    return w.isAlwaysOnTop();
+  });
+  ipcMain.handle('steez:chat:isPopout', (e) => BrowserWindow.fromWebContents(e.sender) === chatWin);
   ipcMain.handle('win:minimize', () => win?.minimize());
   ipcMain.handle('win:maximize', () => (win?.isMaximized() ? win.unmaximize() : win?.maximize()));
   ipcMain.handle('win:close', () => win?.close());

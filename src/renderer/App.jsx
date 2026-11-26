@@ -15,6 +15,7 @@ const GiftsView = lazy(() => import('./views/queue/GiftsView.jsx'));
 const SubathonPage = lazy(() => import('./views/subathon/SubathonPage.jsx'));
 const ImportAccounts = lazy(() => import('./views/ImportAccounts.jsx'));
 const ChestsPage = lazy(() => import('./views/chests/ChestsPage.jsx'));
+const TwitchChatPage = lazy(() => import('./views/chat/TwitchChatPage.jsx'));
 
 // Grouped by what you're doing, not by how Steez is built.
 export const NAV = [
@@ -33,6 +34,7 @@ export const NAV = [
   {
     group: 'Chat',
     items: [
+      { id: 'chat', label: 'Twitch Chat', icon: 'chat' },
       { id: 'commands', label: 'Commands', icon: 'terminal' },
       { id: 'timers', label: 'Timers', icon: 'clock' },
       { id: 'quotes', label: 'Quotes', icon: 'quote' },
@@ -205,6 +207,7 @@ export default function App() {
   else if (page.id === 'overlays') view = <Overlays />;
   else if (page.id === 'import') view = <ImportAccounts go={go} />;
   else if (page.id === 'chests') view = <ChestsPage />;
+  else if (page.id === 'chat') view = <TwitchChatPage />;
   else if (page.id === 'settings') view = <Settings twitch={twitch} update={update} />;
   else if (BOT_PAGES.has(page.id)) view = <BotPage key={page.id} id={page.id} />;
 

@@ -694,7 +694,7 @@ function pageGames(main, on) {
         h('div', { class: 'sub-group', style: 'margin:0' },
           h('div', { class: 'sg-title' }, title),
           list.length
-            ? list.map((p, i) => h('div', { class: 'row', style: 'justify-content:space-between;padding:4px 0' }, h('span', {}, `${i + 1}. ${p.user}`), h('b', { style: tone(p.net) }, signed(p.net))))
+            ? list.map((p, i) => h('div', { class: 'row', style: 'justify-content:space-between;padding:4px 0' }, h('span', { class: 'grow' }, `${i + 1}. ${p.user}`), h('b', { style: tone(p.net) }, signed(p.net)), btn('Reset', () => resetOne(p.login || p.user), 'sm')))
             : h('div', { class: 'muted small' }, 'Nobody yet'));
       put(pnlBox,
         h('div', { style: 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px' },
@@ -720,6 +720,13 @@ function pageGames(main, on) {
       );
     }).catch(() => {});
   drawPnl();
+  const oneViewer = h('input', { placeholder: 'viewer name', style: 'max-width:170px' });
+  const resetAll = () => confirm('Start everyone’s gambling PnL over from zero? Points are not touched.') && api.action('pnl:reset').then(() => (toast('Everyone’s PnL reset'), drawPnl()));
+  const resetOne = (login) => {
+    const l = String(login || '').trim().replace(/^@/, '');
+    if (!l) return toast('Type a viewer name first');
+    api.action('pnl:resetViewer', { login: l }).then(() => (toast(`${l}’s PnL reset`), (oneViewer.value = ''), drawPnl())).catch(() => {});
+  };
   // Plinko: the board the current settings make, with its average return
   const plinkoBox = h('div', { class: 'muted' }, 'Loading…');
   const slotColor = (k, rows) => `hsl(${(48 - 56 * (Math.abs(k - rows / 2) / (rows / 2)) + 360) % 360} 95% 58%)`;
@@ -749,7 +756,10 @@ function pageGames(main, on) {
       pnlBox,
       h('div', { class: 'row', style: 'margin-top:12px' },
         btn('Refresh', drawPnl, 'sm'),
-        btn('Reset everyone’s PnL', () => confirm('Start everyone’s gambling PnL over from zero? Points are not touched.') && api.action('pnl:reset').then(() => (toast('PnL reset'), drawPnl())), 'sm danger'),
+        btn('Reset everyone’s PnL', resetAll, 'sm danger'),
+        h('span', { class: 'grow' }),
+        oneViewer,
+        btn('Reset viewer', () => resetOne(oneViewer.value), 'sm'),
       ),
     ),
     card('Plinko board',
@@ -1077,7 +1087,7 @@ function pageCasino(main, on) {
   add(main,
     h('div', { class: 'grid2' },
       h('div', {}, card('Status', st), settingsForm('casino', { title: 'Casino settings', onSaved: async () => (await api.action('modpanel:apply'), draw()) })),
-      h('div', {}, card('How it’s going', statsBox, h('div', { class: 'row', style: 'margin-top:10px' }, btn('Refresh', drawStats, 'sm'))), setup)),
+      h('div', {}, card('How it’s going', statsBox, h('div', { class: 'row', style: 'margin-top:10px' }, btn('Refresh', drawStats, 'sm'), btn('Reset everyone’s PnL', () => confirm('Start everyone’s profit and loss over from zero? This resets the casino leaderboard, these stats and !pnl. Points are not touched.') && api.action('pnl:reset').then(() => (toast('Everyone’s PnL reset'), drawStats())), 'sm danger'))), setup)),
   );
 }
 

@@ -85,4 +85,19 @@ export function channelPnl({ skip = new Set(), top = 5 } = {}) {
 export function resetPnl() {
   for (const u of Object.values(db.users)) delete u.pnl;
   save();
+  for (const fn of resetHooks) fn();
 }
+
+/** Start one viewer's PnL over. Returns false if they have none. */
+export function resetViewerPnl(login) {
+  const u = db.users[String(login || '').toLowerCase().replace(/^@/, '')];
+  if (!u?.pnl) return false;
+  delete u.pnl;
+  save();
+  for (const fn of resetHooks) fn();
+  return true;
+}
+
+// Things that cache PnL totals (the casino leaderboard) forget them after a reset.
+const resetHooks = new Set();
+export const onPnlReset = (fn) => resetHooks.add(fn);

@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('steez', {
     install: () => ipcRenderer.invoke('steez:update:install'),
     onState: listen('steez:update'),
   },
+  chat: {
+    popout: () => ipcRenderer.invoke('steez:chat:popout'),
+    onTop: (on) => ipcRenderer.invoke('steez:chat:onTop', on),
+  },
   open: (url) => ipcRenderer.invoke('steez:open', url),
   copy: (text) => ipcRenderer.invoke('steez:copy', text),
   openDataFolder: () => ipcRenderer.invoke('steez:openLogs'),

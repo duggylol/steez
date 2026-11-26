@@ -22,6 +22,7 @@ import * as ai from './modules/ai.js';
 import * as achievements from './modules/achievements.js';
 import * as stats from './modules/stats.js';
 import * as casino from './modules/casino.js';
+import { createChatFeed } from './chatFeed.js';
 
 export const MODULES = { stream, commands, timers, moderation, loyalty, games, boss, minigames, giveaways, quotes, polls, events, shop, hype, ai, achievements, stats, casino };
 
@@ -37,6 +38,11 @@ export async function startBot({ openUrl } = {}) {
     } catch (e) {
       log.error(`Bot module "${name}" failed to load`, e);
     }
+  }
+  try {
+    createChatFeed(bot);
+  } catch (e) {
+    log.error('Twitch Chat feed failed to start', e);
   }
   log.info(`Chat bot ready: ${Object.keys(MODULES).length} modules, ${bot.builtins.size} built-in commands.`);
   return bot;

@@ -3,7 +3,7 @@
 // with a crypto-grade random source; the website only shows what happened.
 import { bot } from '../core/bot.js';
 import { db, save, findUser } from '../store.js';
-import { recordPlay } from '../pnl.js';
+import { recordPlay, onPnlReset } from '../pnl.js';
 import { normLogin } from '../util.js';
 import { GAMES, gameInfo, cryptoRng } from './engine.js';
 
@@ -39,6 +39,7 @@ function games() {
 }
 
 let topCache = { t: 0, list: [] };
+onPnlReset(() => (topCache = { t: 0, list: [] }));
 function top() {
   if (Date.now() - topCache.t < 30_000) return topCache.list;
   const list = [];

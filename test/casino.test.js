@@ -283,3 +283,22 @@ test('big wins go on the list and the biggest are announced in chat', () => {
   assert.match(said.at(-1), /Cara hit 97× on Dice/);
   _setRng(null);
 });
+
+test('resetting PnL (one viewer or everyone) clears the casino leaderboard right away', async () => {
+  const { resetViewerPnl, resetPnl } = await import('../src/main/bot/pnl.js');
+  resetPnl(); // start clean (this also drops the leaderboard's 30-second cache)
+  db.users.dana = { login: 'dana', display: 'Dana', points: 1000, stats: {}, achievements: {} };
+  _setRng(scripted([0, 0]));
+  casinoCall('bet', { game: 'dice', bet: 10, params: { chance: 50 } }, { login: 'dana', display: 'Dana' });
+  casinoCall('bet', { game: 'dice', bet: 10, params: { chance: 50 } }, { login: 'alice', display: 'Alice' });
+  _setRng(null);
+  assert.ok(casinoCall('info', {}, { login: 'dana' }).top.some((t) => t.user === 'Dana'));
+  assert.equal(resetViewerPnl('@Dana'), true);
+  assert.equal(db.users.dana.pnl, undefined);
+  assert.equal(resetViewerPnl('dana'), false); // nothing left to reset
+  assert.ok(!casinoCall('info', {}, { login: 'dana' }).top.some((t) => t.user === 'Dana'));
+  assert.ok(db.users.alice.pnl);
+  resetPnl();
+  assert.equal(db.users.alice.pnl, undefined);
+  assert.deepEqual(casinoCall('info', {}, { login: 'dana' }).top, []);
+});
