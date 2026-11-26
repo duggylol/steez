@@ -67,3 +67,13 @@ test('a dock socket gets chat lines and nothing else from the Steez window feed'
   ws.close();
   assert.deepEqual(got, ['chatfeed', 'chatfeed:del']);
 });
+
+test('chatting from the dock explains what is wrong before anything reaches Twitch', async () => {
+  const say = (text) => fetch(`http://${base}/dockapi/chat/say`, { method: 'POST', headers: { 'x-dock-key': chatDockKey(), 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).then(async (r) => [r.status, (await r.json()).error]);
+  assert.deepEqual(await say('   '), [400, 'Type a message first.']);
+  assert.deepEqual((await say('x'.repeat(501)))[0], 400);
+  assert.match((await say('/ban someone'))[1], /Slash commands/);
+  assert.match((await say('hello chat'))[1], /Connect your Twitch channel/); // no channel connected in this test
+  const noKey = await fetch(`http://${base}/dockapi/chat/say`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"text":"hi"}' });
+  assert.equal(noKey.status, 401);
+});

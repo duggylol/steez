@@ -188,6 +188,7 @@ export function createBotRouter({ key, openUrl }) {
   r.get('/dockapi/chat/recent', dock(() => bot.runAction('chatfeed:recent')));
   r.post('/dockapi/chat/refresh', dock(() => bot.runAction('chatfeed:refresh')));
   r.post('/dockapi/chat/mod', dock((b) => bot.runAction('chatfeed:mod', b)));
+  r.post('/dockapi/chat/say', dock((b) => bot.runAction('chatfeed:say', b)));
 
   // ─── Private (Steez window only) ───────────────────────────
   r.use('/api', (req, res, next) => {

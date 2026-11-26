@@ -127,6 +127,7 @@ export class TwitchIRC extends EventEmitter {
         else this.emit('notice', m.trailing, m.tags);
         break;
       case 'USERSTATE': {
+        this.userstate = m.tags; // how this account looks in chat: badges, colour, display name
         const b = m.tags.badges || '';
         this.isMod = m.tags.mod === '1' || b.includes('broadcaster') || b.includes('moderator');
         break;

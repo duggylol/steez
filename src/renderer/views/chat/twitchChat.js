@@ -23,6 +23,7 @@ export const DEFAULT_LAYOUT = {
   font: 13,
   timestamps: false,
   modIcons: true,
+  chatBox: true,
   panes: [
     { id: 'chat', title: 'Chat', cats: ['chat'], w: 1.5 },
     { id: 'cmd', title: 'Commands & Bots', cats: ['command', 'bot'], w: 1 },
@@ -202,6 +203,7 @@ function appTransport() {
     recent: () => api.action('chatfeed:recent'),
     refresh: () => api.action('chatfeed:refresh'),
     mod: (a) => api.action('chatfeed:mod', a),
+    say: (text) => api.action('chatfeed:say', { text }),
     listen(h) {
       connectBotSocket();
       const offs = [onBot('chatfeed', h.add), onBot('chatfeed:del', h.del), onBot('chatfeed:assets', h.assets)];
@@ -220,6 +222,7 @@ function dockTransport(key) {
     recent: () => call('GET', 'recent'),
     refresh: () => call('POST', 'refresh', {}),
     mod: (a) => call('POST', 'mod', a),
+    say: (text) => call('POST', 'say', { text }),
     listen(h) {
       let ws = null;
       let dead = false;
@@ -298,7 +301,8 @@ export function mountTwitchChat(root, { popout = false, dock = null } = {}) {
     out.append(' Pop out');
     bar.append(obs, out);
   }
-  shell.append(bar, panesEl);
+  const box = chatBox();
+  shell.append(bar, panesEl, box.el);
   root.replaceChildren(shell);
 
   function loadLayout() {
@@ -331,7 +335,97 @@ export function mountTwitchChat(root, { popout = false, dock = null } = {}) {
   };
   window.addEventListener('storage', onStorage);
 
+  // ─── Chatting from here (as the streamer) ──
+  function chatBox() {
+    const wrap = el('div', 'tc-send');
+    const input = el('input');
+    input.type = 'text';
+    input.maxLength = 500;
+    input.placeholder = 'Send a message';
+    input.spellcheck = true;
+    const count = el('span', 'tc-count');
+    const as = el('span', 'tc-as');
+    const go = el('button', 'tc-btn primary', 'Chat');
+    const row = el('div', 'tc-send-row');
+    row.append(as, count, go);
+    wrap.append(input, row);
+    let last = '';
+    let busy = false;
+    // Tab completes emote names and the names of people in chat, cycling on repeat presses
+    let tab = null;
+    const candidates = (prefix) => {
+      const p = prefix.toLowerCase();
+      const at = p.startsWith('@');
+      const q = at ? p.slice(1) : p;
+      const names = [...new Set(items.slice(-300).reverse().map((it) => it.user?.display).filter(Boolean))].filter((n) => n.toLowerCase().startsWith(q)).map((n) => (at ? '@' : '') + n);
+      const emotes = at ? [] : Object.keys(assets.emotes || {}).filter((e) => e.toLowerCase().startsWith(q)).sort((a, b) => a.length - b.length);
+      return [...names, ...emotes].slice(0, 50);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const v = input.value;
+        const end = input.selectionStart;
+        if (tab && tab.text !== v) tab = null; // the text changed since the last Tab: start over
+        if (!tab) {
+          const start = v.lastIndexOf(' ', end - 1) + 1;
+          const word = v.slice(start, end);
+          if (!word) return;
+          tab = { start, end, list: candidates(word), i: -1 };
+        }
+        if (!tab.list.length) return (tab = null);
+        tab.i = (tab.i + (e.shiftKey ? -1 : 1) + tab.list.length) % tab.list.length;
+        const pick = tab.list[tab.i];
+        input.value = v.slice(0, tab.start) + pick + ' ' + v.slice(tab.end).replace(/^ /, '');
+        tab.end = tab.start + pick.length + 1;
+        tab.text = input.value;
+        input.setSelectionRange(tab.end, tab.end);
+        return update();
+      }
+      tab = null;
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      } else if (e.key === 'ArrowUp' && !input.value && last) {
+        e.preventDefault();
+        input.value = last;
+        update();
+      }
+    });
+    const update = () => {
+      const n = input.value.length;
+      count.textContent = n > 400 ? String(500 - n) : '';
+      count.classList.toggle('warn', n > 480);
+      go.disabled = busy || !input.value.trim();
+    };
+    input.addEventListener('input', () => ((tab = null), update()));
+    async function send() {
+      const text = input.value.trim();
+      if (!text || busy) return;
+      busy = true;
+      update();
+      try {
+        await T.say(text);
+        last = text;
+        input.value = '';
+        wrap.classList.remove('err');
+        as.textContent = chattingAs();
+      } catch (e) {
+        wrap.classList.add('err');
+        as.textContent = e.message || 'Could not send that.';
+      }
+      busy = false;
+      update();
+      input.focus();
+    }
+    go.addEventListener('click', send);
+    const chattingAs = () => (assets.channel ? `Chatting as ${assets.channel.login}` : '');
+    update();
+    return { el: wrap, refresh: () => (as.textContent = wrap.classList.contains('err') ? as.textContent : chattingAs()) };
+  }
+
   function applyLook() {
+    box?.el.classList.toggle('hidden', !layout.chatBox);
     shell.style.setProperty('--tc-font', `${layout.font}px`);
     panesEl.classList.toggle('rows', stacked());
     dirBtn.replaceChildren(icon(layout.dir === 'auto' ? 'auto' : layout.dir === 'rows' ? 'rows' : 'cols'));
@@ -614,7 +708,7 @@ export function mountTwitchChat(root, { popout = false, dock = null } = {}) {
     reset.addEventListener('click', () => setLayout(structuredClone(DEFAULT_LAYOUT)));
     const row = el('div', 'row');
     row.append(reset);
-    pop.append(el('div', 'h', 'Text size'), font, ck('timestamps', 'Show timestamps'), ck('modIcons', 'Mod buttons on hover (delete, timeout, ban)'), row);
+    pop.append(el('div', 'h', 'Text size'), font, ck('timestamps', 'Show timestamps'), ck('modIcons', 'Mod buttons on hover (delete, timeout, ban)'), ck('chatBox', 'Show the chat box'), row);
     const r = anchor.getBoundingClientRect();
     pop.style.top = `${r.bottom + 6}px`;
     pop.style.right = `${Math.max(10, innerWidth - r.right)}px`;
@@ -689,6 +783,7 @@ export function mountTwitchChat(root, { popout = false, dock = null } = {}) {
   function applyAssets(a) {
     if (!a) return;
     assets = a;
+    box.refresh();
     const c = a.counts || {};
     status.textContent = a.channel ? `#${a.channel.login} · 7TV ${c['7tv'] || 0} · BTTV ${c.bttv || 0} · FFZ ${c.ffz || 0} emotes` : 'Connect your Twitch channel in Settings to load emotes and badges';
     build();

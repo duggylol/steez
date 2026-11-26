@@ -9,6 +9,7 @@ import { log } from './logger.js';
 import { broadcast } from './web/hub.js';
 import { helix } from './twitch/helix.js';
 import { getAccount, onAuthChange } from './twitch/auth.js';
+import { TwitchIRC } from './twitch/irc.js';
 import { normLogin } from './util.js';
 
 const KEEP = 400;
@@ -91,6 +92,11 @@ export function createChatFeed(bot) {
 
   function fromChat(tags, login, text) {
     const c = ctxOf();
+    // our own line coming back from Twitch: the real one replaces the stand-in we'd otherwise show
+    if (login === c.me) {
+      const i = pendingSelf.findIndex((p) => p.text === text.replace(/^\x01ACTION (.*)\x01$/, '$1'));
+      if (i >= 0) clearTimeout(pendingSelf.splice(i, 1)[0].timer);
+    }
     let action = false;
     if (text.startsWith('\x01ACTION ')) {
       action = true;
@@ -314,6 +320,55 @@ export function createChatFeed(bot) {
     };
     open();
   }
+
+  // ─── Chatting as the streamer (from the Twitch Chat page or the OBS dock) ───────
+  // A small extra chat connection logged in as the streamer, only for sending. Twitch shows the
+  // line to everyone, including our reading connection; if it doesn't come back within a few
+  // seconds we show it ourselves.
+  let sender = null;
+  const pendingSelf = [];
+  function getSender() {
+    const b = getAccount('broadcaster');
+    if (!b) throw new Error('Connect your Twitch channel in Steez → Settings to chat from here.');
+    if (sender && sender.creds?.login === b.login.toLowerCase()) return sender;
+    sender?.disconnect();
+    sender = new TwitchIRC();
+    sender.on('authfail', () => log.warn('Twitch Chat: your Twitch login was refused for sending. Reconnect your channel in Settings.'));
+    sender.on('error', () => {});
+    sender.connect({ login: b.login, token: b.accessToken, channel: b.login });
+    return sender;
+  }
+  function say(raw) {
+    let text = String(raw || '').replace(/[\r\n]+/g, ' ').trim();
+    if (!text) throw new Error('Type a message first.');
+    if (text.length > 500) throw new Error('Twitch messages can be up to 500 characters.');
+    let action = false;
+    if (/^\/me\s+/i.test(text)) {
+      action = true;
+      text = text.replace(/^\/me\s+/i, '');
+    } else if (text.startsWith('/') && !text.startsWith('//')) throw new Error('Slash commands other than /me don’t work from here. Use the mod buttons on a message instead.');
+    const s = getSender();
+    s.say(text, { action });
+    const b = getAccount('broadcaster');
+    const entry = { text, timer: null };
+    entry.timer = setTimeout(() => {
+      const i = pendingSelf.indexOf(entry);
+      if (i < 0) return;
+      pendingSelf.splice(i, 1);
+      const us = s.userstate || {};
+      const login = b.login.toLowerCase();
+      const badges = parseBadges(us.badges || 'broadcaster/1');
+      push({ id: `me${seq + 1}`, kind: 'chat', cat: classify({ login, text, badges, isMod: true }, ctxOf()), user: { login, display: us['display-name'] || b.login, color: us.color || '', id: b.userId || '', badges }, text, emotes: [], action });
+    }, 3000);
+    pendingSelf.push(entry);
+    if (pendingSelf.length > 20) clearTimeout(pendingSelf.shift().timer);
+    return true;
+  }
+  onAuthChange(() => {
+    sender?.disconnect();
+    sender = null;
+  });
+  bot.action('chatfeed:say', ({ text }) => say(text));
 
   onAuthChange(() => setTimeout(reload, 1500));
   setTimeout(reload, 3000);
