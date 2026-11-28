@@ -8,7 +8,7 @@ export const PAGES = [
   { id: 'subathon', title: 'Subathon', description: 'Countdown timer, TV screen, wake-up media menu and goals', keywords: ['countdown', 'timer', 'clock', 'tv', 'goals', 'media', 'sounds', 'wake up'] },
   { id: 'shop', title: 'Shop & Effects', description: 'Viewers spend points on on-stream effects', keywords: ['store', 'redeem', 'confetti', 'emote rain', 'tts', 'shake', 'spotlight', 'effects'] },
   { id: 'chests', title: 'Fortnite Chests', description: 'Counts the chests you open in Fortnite, live and from replays, with OBS overlays', keywords: ['fortnite', 'chest', 'chests', 'loot', 'treasure', 'replay', 'counter', 'tracker', 'overlay'] },
-  { id: 'hype', title: 'Hype & Clips', description: 'Hype meter, hype moments and the !clip command', keywords: ['hype', 'clip', 'clips', 'highlights', 'vod'] },
+  { id: 'hype', title: 'Hype & Clips', description: 'Hype meter, hype moments, the !clip command and clips to Discord', keywords: ['hype', 'clip', 'clips', 'highlights', 'vod', 'discord', 'webhook', 'clip video'] },
   { id: 'chat', title: 'Twitch Chat', description: 'Your chat split into panes: chat, commands & bots, mods and stream events, with 7TV emotes', keywords: ['chat', 'twitch chat', 'messages', '7tv', 'bttv', 'ffz', 'emotes', 'badges', 'mod chat', 'events', 'subs', 'raids', 'bits', 'pop out', 'popout', 'window'] },
   { id: 'commands', title: 'Commands', description: 'Custom chat commands and their responses', keywords: ['command', 'cmd', 'chat commands', 'response', 'variables', 'counter'] },
   { id: 'timers', title: 'Timers', description: 'Messages the bot posts on a schedule', keywords: ['timed messages', 'repeat', 'auto message', 'interval', 'announcements'] },

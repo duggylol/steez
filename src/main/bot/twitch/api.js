@@ -61,6 +61,14 @@ export async function createClip() {
   return r.data[0];
 }
 
+/** The clip's video file link, or null while Twitch is still making it (needs channel:manage:clips). */
+export async function clipDownloadUrl(clipId) {
+  const id = broadcasterId();
+  const r = await helix('broadcaster', 'GET', '/clips/downloads', { query: { editor_id: id, broadcaster_id: id, clip_id: clipId } });
+  const d = r?.data?.[0];
+  return d?.landscape_download_url || d?.portrait_download_url || null;
+}
+
 export async function shoutout(toId) {
   return helix('bot', 'POST', '/chat/shoutouts', {
     query: { from_broadcaster_id: broadcasterId(), to_broadcaster_id: toId, moderator_id: moderatorId() },

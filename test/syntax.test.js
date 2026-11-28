@@ -19,6 +19,7 @@ const walk = (dir) => {
 };
 walk(path.join(root, 'src', 'main'));
 walk(path.join(root, 'scripts'));
+walk(path.join(root, 'src', 'renderer')); // the plain .js pages (the .jsx ones go through Vite)
 
 test('main-process and script files all parse', () => {
   // one node process checks them all: much faster than one `node --check` per file

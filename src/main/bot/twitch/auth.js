@@ -21,6 +21,7 @@ export const SCOPES = {
     'channel:read:redemptions',
     'channel:read:ads',
     'clips:edit',
+    'channel:manage:clips', // download clip videos (to post them in Discord)
     'moderator:read:followers',
     'moderator:read:chatters',
     'moderator:manage:chat_settings',

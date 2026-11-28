@@ -81,7 +81,8 @@ function importCommands(text) {
       userCooldown: Number(it.cooldown?.user ?? it.userCooldown ?? it.UserCooldown ?? 0) || 0,
       aliases: Array.isArray(it.aliases) ? it.aliases.map((a) => String(a).replace(/^!/, '').toLowerCase()) : [],
       cost: Number(it.cost ?? it.Cost ?? 0) || 0,
-      enabled: it.enabled !== false,
+      // Another bot's copy of a Steez command (!clip, !uptime…) comes in switched off, so Steez's own keeps working.
+      enabled: it.enabled !== false && !bot.builtins.has(name),
       count: Number(it.count) || 0,
       importedAt: Date.now(),
     };

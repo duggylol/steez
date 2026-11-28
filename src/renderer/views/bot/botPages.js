@@ -97,6 +97,13 @@ export const HELP = {
   'ai.autoTranslate': 'Automatically translate messages written in non-Latin scripts (Cyrillic, CJK, Arabic, ...).',
   'ai.firstMessageSpamCheck': 'Ask the AI whether first-time chatter messages are spam and delete them.',
   'hype.threshold': 'A hype moment = chat speed this many times above its normal baseline.',
+  'clips.cooldownSeconds': 'How long each viewer waits between clips. !clip is on even with the Chat bot switched off; turn it off on the Commands page.',
+  'clips.message': 'Posted in chat with the link. ${user} = who clipped it, ${clip} = the link.',
+  'clips.discordVideo': 'Every new clip (!clip, the Clip button, the AI) is posted in your Discord channel as the video file. If it’s too big for Discord, the link is posted instead and Discord shows a player.',
+  'clips.discordWebhookUrl': 'The channel’s webhook link. Leave empty to use the Discord webhook from Settings.',
+  'clips.discordUploadLimit': 'Discord’s upload limit for your server. Bigger clips are posted as a link.',
+  'clips.discordHypeClips': 'Also post the clips made automatically at hype moments.',
+  'clips.discordMessage': 'Text above the video. ${user} = who clipped it, ${clip} = the link (<link> hides Discord’s preview), ${title}, ${game}, ${channel}.',
   'songs.voteSkipVotes': 'Votes needed for !voteskip.',
   'games.boss.autoSpawnMinutes': '0 = only spawn manually.',
   'games.trivia.difficulty': 'Mix = 40% easy, 35% medium, 25% hard. Or always ask one difficulty.',
@@ -136,6 +143,11 @@ const WIDTHS = {
 };
 const SELECTS = {
   'general.replyStyle': ['mention', 'reply'],
+  'clips.discordUploadLimit': [
+    { value: '10', label: '10 MB — any server' },
+    { value: '50', label: '50 MB — server boost level 2' },
+    { value: '100', label: '100 MB — server boost level 3' },
+  ],
   'games.trivia.difficulty': [
     { value: 'mix', label: 'Mix (easy, medium and hard)' },
     { value: 'easy', label: 'Easy only' },
@@ -197,7 +209,17 @@ function objTable(arr, path) {
   return wrap;
 }
 
+// Labels that read better than the setting's own name.
+const LABELS = {
+  'clips.discordVideo': 'Post new clips in Discord',
+  'clips.discordHypeClips': 'Include hype-moment clips',
+  'clips.discordWebhookUrl': 'Discord webhook link',
+  'clips.discordUploadLimit': 'Discord upload limit',
+  'clips.discordMessage': 'Message',
+};
+
 function field(obj, key, path) {
+  const label = (k) => LABELS[path] || labelOf(k);
   const v = obj[key];
   const help = HELP[path] && h('div', { class: 'help' }, HELP[path]);
   if (typeof v === 'boolean')
@@ -906,12 +928,68 @@ function pageHype(main, on) {
       ? h('table', {}, h('tr', {}, ['When', 'Stream time', 'Speed', 'Top', 'Chat', 'Clip'].map((t) => h('th', {}, t))),
           m.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.offset, x.manual ? h('div', { class: 'tag' }, `📍 ${x.note || 'marker'}`) : null), h('td', {}, x.mpm ? `${x.mpm}/min (${x.score}x)` : ''), h('td', {}, (x.top || []).join(' ')), h('td', { class: 'small mono', style: 'max-width:380px' }, (x.sample || []).slice(-3).join(' / ')), h('td', {}, x.clip ? h('a', { href: x.clip, target: '_blank' }, 'watch') : ''))))
       : h('div', { class: 'empty' }, 'No hype moments yet. They are detected automatically while live, or saved with !marker.'));
-    put(clips, c.length ? h('table', {}, c.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.by), h('td', {}, x.game || ''), h('td', {}, h('a', { href: x.url, target: '_blank' }, x.url))))) : h('div', { class: 'empty' }, 'No clips yet.'));
+    const sent = (x) => (x.discord === 'video' ? h('span', { class: 'pill good' }, 'Discord · video') : x.discord === 'link' ? h('span', { class: 'pill' }, 'Discord · link') : '');
+    put(clips, c.length ? h('table', {}, c.slice(0, 100).map((x) => h('tr', {}, h('td', { class: 'small' }, new Date(x.t).toLocaleString()), h('td', {}, x.by), h('td', {}, x.game || ''), h('td', {}, h('a', { href: x.url, target: '_blank' }, x.url)), h('td', {}, sent(x))))) : h('div', { class: 'empty' }, 'No clips yet.'));
   };
   load();
   on['hype:moment'] = load;
   on.clip = load;
-  add(main, card('Live hype meter', meter), h('div', { class: 'grid2' }, settingsForm('hype'), settingsForm('clips', { title: '!clip command' })), card('Hype moments (with VOD timestamps)', moments), card('Clips', clips));
+  add(main, card('Live hype meter', meter), h('div', { class: 'grid2' }, settingsForm('hype'), settingsForm('clips', { title: '!clip command', keys: ['cooldownSeconds', 'message'] })), clipDiscordCard(), card('Hype moments (with VOD timestamps)', moments), card('Clips', clips));
+}
+
+// Clips → Discord: the webhook setup, the options, and a button to send the newest clip now.
+function clipDiscordCard() {
+  const keys = ['discordVideo', 'discordHypeClips', 'discordWebhookUrl', 'discordUploadLimit', 'discordMessage'];
+  const data = structuredClone(S.settings.clips);
+  const needsScope = (S.auth.broadcaster?.missingScopes || []).includes('channel:manage:clips');
+  const save = async (quiet) => {
+    const url = (data.discordWebhookUrl || '').trim();
+    if (url && !/^https:\/\/(?:(?:canary|ptb)\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+\/?$/.test(url)) {
+      toast('That isn’t a Discord webhook link. It starts with https://discord.com/api/webhooks/', true);
+      return false;
+    }
+    data.discordWebhookUrl = url;
+    S.settings = await api.put('/api/settings', { clips: { ...S.settings.clips, ...Object.fromEntries(keys.map((k) => [k, data[k]])) } });
+    if (!quiet) toast('Saved ✓');
+    return true;
+  };
+  const test = async () => {
+    if (!(await save(true))) return;
+    toast('Sending the newest clip to Discord…');
+    try {
+      const r = await api.action('clip:discord');
+      toast(r?.sent === 'video' ? 'Posted in Discord as a video ✓' : `Posted the link in Discord. ${r?.note || ''}`);
+    } catch (e) {
+      toast(e.message || 'Couldn’t post in Discord', true);
+    }
+  };
+  const reconnect = async () => {
+    toast('Finish the login in your browser…');
+    try {
+      await api.post('/api/auth/login/broadcaster');
+      toast('Twitch reconnected');
+    } catch {}
+    await reload();
+  };
+  return card(
+    'Send clips to Discord',
+    needsScope && S.auth.broadcaster
+      ? h('div', { class: 'banner warn' }, h('div', { class: 'grow' }, h('b', {}, 'One more Twitch permission. '), 'Reconnect Twitch so Steez can download clip videos. Until then the link is posted.'), btn('Reconnect Twitch', reconnect, 'sm primary'))
+      : null,
+    h('div', { class: 'grid2', style: 'align-items:start' },
+      h('div', {},
+        arrange(['discordVideo', 'discordHypeClips'].map((k) => field(data, k, `clips.${k}`))),
+        h('div', { class: 'help', style: 'margin-top:12px' },
+          h('b', {}, 'Get a webhook link (1 minute)'),
+          h('ol', { style: 'margin:6px 0 0 18px;padding:0;line-height:1.7' },
+            h('li', {}, 'In Discord, hover the channel the clips should go to and click the ⚙️ gear (Edit Channel).'),
+            h('li', {}, 'Open ', h('b', {}, 'Integrations'), ' → ', h('b', {}, 'Webhooks'), ' → ', h('b', {}, 'New Webhook'), '. Name it e.g. “Steez clips”.'),
+            h('li', {}, 'Click ', h('b', {}, 'Copy Webhook URL'), ', paste it here and press Save.'),
+            h('li', {}, 'Press ', h('b', {}, 'Send newest clip'), ' to check it works.')))),
+      h('div', {},
+        arrange(['discordWebhookUrl', 'discordUploadLimit', 'discordMessage'].map((k) => field(data, k, `clips.${k}`))),
+        h('div', { class: 'row', style: 'margin-top:8px' }, btn('Save', () => save(), 'primary'), btn('Send newest clip', test)))),
+  );
 }
 
 // Analytics

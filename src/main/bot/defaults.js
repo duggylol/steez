@@ -204,7 +204,16 @@ export const defaultSettings = {
     announce: true,
     announceMessage: '🔥 HYPE MOMENT! Chat is going wild — clipped it: ${clip}',
   },
-  clips: { cooldownSeconds: 60, message: '🎬 Clip created by ${user}: ${clip}' },
+  clips: {
+    cooldownSeconds: 60,
+    message: '🎬 Clip created by ${user}: ${clip}',
+    // Post new clips in Discord (as the video file when it fits, otherwise the link).
+    discordVideo: false,
+    discordWebhookUrl: '', // empty = the Discord webhook from Settings
+    discordMessage: '🎬 **${user}** clipped this on stream — ${title}\n<${clip}>',
+    discordUploadLimit: '10', // MB: 10 normally, 50 for a level 2 boosted server, 100 for level 3
+    discordHypeClips: true, // also the automatic hype-moment clips
+  },
   achievements: { enabled: true, announce: true, rewardPoints: 100 },
   // The web casino: viewers log in with Twitch and play with their points. !casino posts the link.
   casino: {

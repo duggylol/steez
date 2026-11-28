@@ -307,9 +307,12 @@ class Bot extends EventEmitter {
   }
 
   findCommand(name) {
+    // A switched-off custom command never hides a built-in one with the same name: imports from
+    // other bots save their copy of e.g. !clip switched off, and Steez's own !clip must still run.
     const cmds = db.commands;
-    if (cmds[name]) return { type: 'custom', name, def: cmds[name] };
-    for (const [k, c] of Object.entries(cmds)) if ((c.aliases || []).includes(name)) return { type: 'custom', name: k, def: c };
+    const on = (c) => c && c.enabled !== false;
+    if (on(cmds[name])) return { type: 'custom', name, def: cmds[name] };
+    for (const [k, c] of Object.entries(cmds)) if (on(c) && (c.aliases || []).includes(name)) return { type: 'custom', name: k, def: c };
     const build = (b) => ({ type: 'builtin', name: b.name, def: { ...b, ...(db.builtins[b.name] || {}) } });
     if (this.builtins.has(name)) return build(this.builtins.get(name));
     for (const b of this.builtins.values()) {
